@@ -21,3 +21,7 @@ signuptest.php
 Thumbs.db
 *.swp
 *.tmp
+
+# Downloaded tools / large binaries (not project code)
+*.exe
+loadtest/k6.exe
