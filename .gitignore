@@ -1,0 +1,23 @@
+# Secrets — NEVER commit (DB password + API keys live here)
+includes/config.php
+
+# User uploads (proof / audio / avatar files) — user data, not code
+uploads/audio/*
+uploads/avatars/*
+uploads/proofs/*
+!uploads/audio/.htaccess
+!uploads/avatars/.htaccess
+!uploads/proofs/.htaccess
+
+# Diagnostics / temp probes
+_opcache-check.php
+_diag.php
+_min.php
+signuptest.php
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

@@ -1,0 +1,122 @@
+/* Admin panel */
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+.admin-header h1 { margin: 0; }
+
+.admin-nav-pills {
+  display: flex;
+  gap: .4rem;
+  margin-left: auto;
+}
+.admin-nav-pills a {
+  padding: .4rem .9rem;
+  border-radius: 99px;
+  font-size: .88rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  text-decoration: none;
+}
+.admin-nav-pills a:hover, .admin-nav-pills a.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  text-align: center;
+}
+.stat-value { font-size: 2rem; font-weight: 700; color: var(--accent); line-height: 1; }
+.stat-label { font-size: .85rem; color: var(--text-dim); margin-top: .4rem; }
+
+/* Collapsible create form */
+details.collapsible { margin-bottom: 1.75rem; }
+details.collapsible summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+}
+details.collapsible summary::-webkit-details-marker { display: none; }
+.inline-form {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-top: .75rem;
+}
+
+/* User detail */
+.user-detail-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+.user-detail-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.user-detail-header h2 { margin: 0; }
+.user-detail-header a  { margin-left: auto; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.detail-grid p { font-size: .93rem; margin-bottom: .4rem; }
+
+.mini-form {
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+.mini-form h3 { margin: 0; font-size: .95rem; }
+.mini-form select,
+.mini-form input { width: auto; flex: 1; }
+
+/* Song editor */
+.song-editor-wrap {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.song-form .form-actions {
+  display: flex;
+  gap: .75rem;
+  align-items: center;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .detail-grid { grid-template-columns: 1fr; }
+  .admin-header { gap: .75rem; }
+}

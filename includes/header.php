@@ -1,0 +1,29 @@
+<?php
+/**
+ * Shared page header. Set any of these before including:
+ *   $pageTitle  string  — <title> text                       (default SITE_NAME)
+ *   $pageCss    array   — CSS basenames, in order, e.g.
+ *                         ['main','dashboard'] → /assets/css/main.css + dashboard.css
+ *   $bodyClass  string  — class attribute for <body>          (default none)
+ *   $showNav    bool    — include the shared nav.php           (default false)
+ *   $pageHead   string  — extra raw HTML injected into <head>  (default none)
+ */
+$pageTitle = $pageTitle ?? SITE_NAME;
+$pageCss   = $pageCss   ?? ['main'];
+$bodyClass = $bodyClass ?? '';
+$showNav   = $showNav   ?? false;
+$pageHead  = $pageHead  ?? '';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?= $pageTitle ?></title>
+<?php foreach ($pageCss as $css): ?>
+<link rel="stylesheet" href="/assets/css/<?= $css ?>.css">
+<?php endforeach; ?>
+<?= $pageHead ?>
+</head>
+<body<?= $bodyClass ? ' class="' . htmlspecialchars($bodyClass) . '"' : '' ?>>
+<?php if ($showNav) include __DIR__ . '/nav.php'; ?>

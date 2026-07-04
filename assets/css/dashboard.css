@@ -1,0 +1,101 @@
+/* Dashboard, profile, exclusive */
+
+.dashboard-header { margin-bottom: 2rem; }
+
+/* Tiles */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.tile {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.5rem;
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  transition: border-color .2s, transform .15s;
+  position: relative;
+}
+
+.tile:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+
+.tile--locked { opacity: .65; cursor: pointer; }
+.tile--locked:hover { border-color: var(--border); transform: none; }
+.tile--cta { border-color: var(--accent); }
+.tile--placeholder { cursor: default; }
+.tile--placeholder:hover { transform: none; border-color: var(--border); }
+
+.tile-icon { font-size: 2rem; line-height: 1; }
+.tile h3   { font-size: 1rem; font-weight: 600; }
+.tile p    { font-size: .88rem; color: var(--text-dim); margin: 0; }
+
+.badge-locked {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  font-size: .72rem;
+  padding: .15rem .5rem;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-dim);
+}
+
+.admin-shortcut { margin-top: 2rem; }
+
+/* Profile */
+.profile-form { margin-top: 1.5rem; }
+
+.avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1.75rem;
+}
+
+.form-actions-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: .5rem;
+}
+
+.avatar-lg {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+  background: var(--bg3);
+}
+
+/* ── Connected (social) accounts ── */
+.connected-accounts {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.connected-accounts h2 { font-size: 1.1rem; margin-bottom: .25rem; }
+
+.conn-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.conn-row:last-child { border-bottom: none; }
+
+.conn-name { font-weight: 600; min-width: 90px; }
+.conn-status { color: var(--text-dim); font-size: .88rem; }
+.conn-status.conn-on { color: var(--success, #22c55e); }
+.conn-note { color: var(--text-dim); font-size: .78rem; font-style: italic; }
+.conn-form { margin: 0 0 0 auto; }   /* push the action button to the right */

@@ -1,0 +1,98 @@
+/* Landing page */
+
+.landing { background: var(--bg); }
+
+/* Nav */
+.landing .top-nav {
+  background: transparent;
+  border-bottom: none;
+  position: absolute;
+  width: 100%;
+}
+.landing .nav-brand { font-size: 1.3rem; }
+.landing .nav-links a { color: rgba(255,255,255,.7); }
+.landing .nav-links a:hover { color: #fff; }
+
+/* Hero */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6rem 1.5rem 4rem;
+  background:
+    radial-gradient(ellipse at 20% 60%, rgba(124,106,245,.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 30%, rgba(91,79,207,.14) 0%, transparent 50%),
+    var(--bg);
+}
+.hero-inner { max-width: 680px; }
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, #fff 0%, #a59bff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-sub {
+  font-size: 1.2rem;
+  color: var(--text-dim);
+  margin-bottom: 2rem;
+  line-height: 1.7;
+}
+.hero-note { color: var(--text-dim); font-size: .88rem; margin-top: .75rem; }
+
+/* Features */
+.features { padding: 5rem 1.5rem; }
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+.feature-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+.feature-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+.feature-card h3 { margin-bottom: .5rem; }
+.feature-card p  { color: var(--text-dim); font-size: .93rem; margin: 0; }
+
+/* Pricing */
+.pricing {
+  padding: 5rem 1.5rem;
+  text-align: center;
+}
+.pricing h2 { font-size: 2rem; margin-bottom: 2rem; }
+.price-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 3rem;
+  gap: 1rem;
+  min-width: 280px;
+}
+.price-amount {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+.price-amount span { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); }
+.price-features {
+  list-style: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  color: var(--text-dim);
+  font-size: .95rem;
+}

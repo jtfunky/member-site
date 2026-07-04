@@ -1,0 +1,22 @@
+# includes/ is loaded only server-side via PHP require_once — never over HTTP.
+# Deny all direct web access (defense-in-depth: protects config.php source even
+# if PHP ever stops executing during an outage/migration).
+#
+# Three layers so at least one applies regardless of host (Apache 2.4 / LiteSpeed):
+
+# 1) Apache 2.4 / LiteSpeed native
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+
+# 2) Apache 2.2 fallback
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>
+
+# 3) mod_rewrite fallback (confirmed active on this host) — forces a hard block
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^ - [F,L]
+</IfModule>

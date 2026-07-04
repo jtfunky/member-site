@@ -1,0 +1,522 @@
+import { initMidi, selectInput, getInputList, onDeviceChange } from './midi.js';
+import { onMidiMessage, flushHits, setChannelFilter, getDefaultMap, getLaneNames } from './input.js';
+import { loadSong, updateChart, getActiveNotes, findClosestNote, expireMissed, reset as resetChart } from './chart.js?v=20260702';
+import { initRenderer, drawFrame, addFlash, addJudgment } from './renderer.js';
+import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING } from './scoring.js?v=20260702';
+import { playHitClick, playCountdownBeep, resumeContext } from './audio.js';
+import { loadAudioUrl, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js';
+import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive } from './acoustic.js';
+import { song as demoSong } from './songs/demo.js';
+
+demoSong.id      = 'demo';
+demoSong.artist  = 'MS Drums';
+demoSong.builtin = true;
+
+// ── State ─────────────────────────────────────────────────
+const STATES = { IDLE: 0, COUNTDOWN: 2, PLAYING: 3, PAUSED: 4, RESULTS: 5 };
+let state            = STATES.IDLE;
+let songStartTime    = 0;
+let scrollTimeWindow = 2000;
+let hitSoundEnabled  = true;
+let scoreState       = null;
+let countdownTimer   = null;
+let rafId            = null;
+let currentSong      = demoSong;
+let songDuration     = 0;   // effective length (ms) for this playthrough
+let pausedPosition   = 0;
+let allSongs         = [];
+let inputMode        = 'keyboard'; // 'midi' | 'keyboard'
+
+// Placement-test config comes from a data element in game.php (the site CSP
+// blocks inline scripts, so we can't set window globals there).
+const _testCfg      = document.getElementById('drum-test-config');
+const DRUM_TEST_MODE = !!_testCfg;
+const CSRF_TOKEN     = _testCfg ? (_testCfg.dataset.csrf || '') : '';
+
+const canvas = document.getElementById('game-canvas');
+initRenderer(canvas);
+
+// ── Fullscreen helpers ────────────────────────────────────
+function enterFullscreen() {
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+}
+
+function exitFullscreenApi() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+}
+
+// Auto-pause when user presses Escape to exit fullscreen
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && state === STATES.PLAYING) pauseGame();
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if (!document.webkitFullscreenElement && state === STATES.PLAYING) pauseGame();
+});
+
+// ── Screen helpers ────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('screen-' + id);
+  if (el) el.classList.add('active');
+}
+
+// ── Song library ──────────────────────────────────────────
+async function loadSongLibrary() {
+  let custom = [];
+  try {
+    const res = await fetch('/api/songs.php');
+    if (res.ok) custom = await res.json();
+  } catch (e) { /* network error, just show demo */ }
+
+  allSongs = [{ ...demoSong, builtin: true }, ...custom];
+  renderSongList();
+}
+
+function renderSongList() {
+  const list = document.getElementById('song-list');
+  list.innerHTML = '';
+
+  // Placement test uses a single standardized exercise so results are comparable.
+  const songs = DRUM_TEST_MODE ? allSongs.filter(s => s.builtin) : allSongs;
+  if (DRUM_TEST_MODE) {
+    const heading = document.querySelector('#song-library h2');
+    if (heading) heading.textContent = 'Placement Test — play this exercise';
+  }
+
+  songs.forEach(song => {
+    const item = document.createElement('div');
+    item.className = 'song-item';
+    item.innerHTML = `
+      <div class="song-item-info">
+        <strong>${escHtml(song.title)}</strong>
+        <span>${escHtml(song.artist || 'Unknown')}</span>
+        <span class="song-meta">${song.bpm} BPM · ${song.notes?.length || 0} notes</span>
+      </div>
+      <button class="btn btn-primary btn-sm song-play-btn">Play</button>
+    `;
+    item.querySelector('.song-play-btn').addEventListener('click', () => selectSong(song));
+    list.appendChild(item);
+  });
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Song selection ────────────────────────────────────────
+function lockLandscape() {
+  try {
+    screen.orientation?.lock('landscape').catch(() => {});
+  } catch (e) {}
+}
+
+function unlockOrientation() {
+  try { screen.orientation?.unlock(); } catch (e) {}
+}
+
+async function selectSong(song) {
+  enterFullscreen(); // must fire synchronously in the click handler — Safari drops the gesture after any await or timer
+  lockLandscape();
+  currentSong = song;
+
+  // Show loading
+  document.getElementById('countdown-title').textContent  = song.title;
+  document.getElementById('countdown-artist').textContent = song.artist || '';
+
+  if (song.audioUrl) {
+    try { await loadAudioUrl(song.audioUrl); } catch (e) { console.warn('Audio load failed:', e); }
+  }
+
+  startCountdown();
+}
+
+// ── Countdown ─────────────────────────────────────────────
+function startCountdown() {
+  showScreen('countdown');
+  let n = 3;
+  const numEl = document.getElementById('countdown-number');
+  numEl.textContent = n;
+  playCountdownBeep(false);
+
+  countdownTimer = setInterval(() => {
+    n--;
+    if (n <= 0) {
+      clearInterval(countdownTimer);
+      startGame();
+    } else {
+      numEl.textContent = n;
+      playCountdownBeep(n === 1);
+    }
+  }, 1000);
+}
+
+// ── Game ──────────────────────────────────────────────────
+// Effective song length (ms). Prefer the stored duration, but self-correct when
+// it's missing/zero/garbage by falling back to the decoded audio's real length,
+// then to the last note's time so the game always ends cleanly.
+function resolveSongDuration() {
+  const stored = Number(currentSong.duration);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+
+  const audioMs = getAudioDurationMs();
+  if (audioMs > 0) return audioMs;
+
+  const notes = currentSong.notes || [];
+  return notes.reduce((max, n) => Math.max(max, n.time), 0);
+}
+
+function startGame() {
+  showScreen('game');
+  document.getElementById('hud-title').textContent = currentSong.title;
+
+  loadSong(currentSong);
+  scoreState    = createScoreState(currentSong.notes.length);
+  songStartTime = performance.now();
+  songDuration  = resolveSongDuration();
+  state         = STATES.PLAYING;
+
+  if (hasAudio()) playAudio(0);   // start from the beginning of the track (offset is ms-into-song, not a timestamp)
+
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function gameLoop(now) {
+  if (state !== STATES.PLAYING) return;
+
+  const songPos = now - songStartTime;
+  updateChart(songPos, scrollTimeWindow);
+
+  const missedLanes = expireMissed(songPos, TIMING.MISS_EXPIRE);
+  missedLanes.forEach(lane => {
+    judgeMiss(scoreState, lane);
+    addJudgment('MISS', lane);
+  });
+
+  // Keyboard hits
+  const hits = flushHits();
+  hits.forEach(hit => processHit(hit.lane, now));
+
+  drawFrame(getActiveNotes(), songPos, scrollTimeWindow, scoreState);
+
+  document.getElementById('hud-score').textContent = scoreState.score;
+  document.getElementById('hud-combo').textContent = scoreState.combo;
+
+  if (songPos >= songDuration + 2000) {
+    endGame();
+    return;
+  }
+
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function processHit(lane, now) {
+  const songPos = now - songStartTime;
+  const note = findClosestNote(lane, songPos, TIMING.MISS_EXPIRE);
+  if (note.index === -1) return;
+
+  const activeNotes = getActiveNotes();
+  const n      = activeNotes[note.index];
+  const signed = songPos - n.time;   // − = early (rushing), + = late (dragging)
+  const dt     = Math.abs(signed);
+  const judgment = judgeHit(scoreState, dt, signed, lane);
+  if (judgment) {
+    n.hit = true;
+    addFlash(lane);
+    addJudgment(judgment, lane);
+    if (hitSoundEnabled) playHitClick();
+  }
+}
+
+function endGame() {
+  state = STATES.RESULTS;
+  cancelAnimationFrame(rafId);
+  stopAudio();
+  showScreen('results');
+
+  const acc   = calcAccuracy(scoreState);
+  const grade = calcGrade(scoreState);
+  const c     = scoreState.counts;
+
+  document.getElementById('results-grade').textContent  = grade;
+  document.getElementById('results-song').textContent   = currentSong.title;
+  document.getElementById('r-score').textContent        = scoreState.score;
+  document.getElementById('r-accuracy').textContent     = acc.toFixed(1) + '%';
+  document.getElementById('r-perfect').textContent      = c.PERFECT;
+  document.getElementById('r-good').textContent         = c.GOOD;
+  document.getElementById('r-miss').textContent         = c.MISS;
+  document.getElementById('r-combo').textContent        = scoreState.maxCombo;
+
+  // Placement-test mode: save this play and fetch AI coaching for it.
+  if (DRUM_TEST_MODE) submitPlacementTest(acc, grade);
+}
+
+// ── Placement test: submit metrics + render AI coaching ───
+const mean  = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+const stdev = arr => {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(mean(arr.map(x => (x - m) * (x - m))));
+};
+
+async function submitPlacementTest(acc, grade) {
+  const box = document.getElementById('results-ai');
+  if (box) {
+    box.style.display = '';
+    box.innerHTML = '<div class="ai-loading">Analyzing your playing…</div>';
+  }
+
+  const laneNames = getLaneNames();
+  const c = scoreState.counts;
+  const pads = Object.keys(scoreState.lanes).map(k => {
+    const b = scoreState.lanes[k];
+    const attempts = b.perfect + b.good + b.miss;
+    return {
+      pad: laneNames[k] || ('Lane ' + k),
+      perfect: b.perfect,
+      good: b.good,
+      miss: b.miss,
+      accuracy: attempts ? Math.round(((b.perfect * 100 + b.good * 50) / (attempts * 100)) * 1000) / 10 : null,
+      avg_offset_ms: b.offsetCount ? Math.round(b.offsetSum / b.offsetCount) : null,
+    };
+  });
+
+  const payload = {
+    song: currentSong.title,
+    input_method: inputMode,
+    score: scoreState.score,
+    accuracy: Math.round(acc * 10) / 10,
+    grade,
+    perfect: c.PERFECT,
+    good: c.GOOD,
+    miss: c.MISS,
+    max_combo: scoreState.maxCombo,
+    total_notes: scoreState.totalNotes,
+    avg_offset_ms: Math.round(mean(scoreState.offsets)),
+    timing_consistency_ms: Math.round(stdev(scoreState.offsets)),
+    pads,
+  };
+
+  try {
+    const saveRes = await fetch('/api/save-test.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      body: JSON.stringify(payload),
+    });
+    const saved = await saveRes.json();
+    if (!saveRes.ok || !saved.id) throw new Error(saved.error || 'Could not save your test.');
+
+    const fbRes = await fetch('/api/ai-feedback.php?id=' + encodeURIComponent(saved.id), {
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+    });
+    const fb = await fbRes.json();
+    if (box) {
+      if (fbRes.ok && fb.feedback_html) {
+        box.innerHTML = '<h3>Coach Zach</h3><div class="ai-feedback-body">' + fb.feedback_html + '</div>';
+      } else {
+        box.innerHTML = '<div class="ai-error">' + escHtml(fb.error || 'Feedback is not available right now.') + '</div>';
+      }
+    }
+  } catch (e) {
+    if (box) box.innerHTML = '<div class="ai-error">' + escHtml(e.message) + '</div>';
+  }
+}
+
+// ── Pause / Resume ────────────────────────────────────────
+function pauseGame() {
+  if (state !== STATES.PLAYING) return;
+  pausedPosition = performance.now() - songStartTime;
+  state = STATES.PAUSED;
+  cancelAnimationFrame(rafId);
+  pauseAudio();
+  showScreen('pause');
+}
+
+function resumeGame() {
+  if (state !== STATES.PAUSED) return;
+  showScreen('game');
+  songStartTime = performance.now() - pausedPosition;
+  state = STATES.PLAYING;
+  resumeAudio();   // resumes from the paused position it stored internally
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+// ── Keyboard input ────────────────────────────────────────
+// 10 lanes → home row A through ; (10 keys)
+const KEY_LANE_MAP = {
+  'a': 0,  // Kick
+  's': 1,  // Snare
+  'd': 2,  // Hi-Hat
+  'f': 3,  // Hi Tom 1
+  'g': 4,  // Hi Tom 2
+  'h': 5,  // Mid Tom
+  'j': 6,  // Floor Tom
+  'k': 7,  // 16" Crash
+  'l': 8,  // 18" Crash
+  ';': 9,  // 22" Ride
+};
+
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  resumeContext();
+
+  if (e.key === 'Escape') {
+    if (state === STATES.PLAYING) pauseGame();
+    else if (state === STATES.PAUSED) resumeGame();
+    return;
+  }
+
+  if (state !== STATES.PLAYING || inputMode !== 'keyboard') return;
+
+  const lane = KEY_LANE_MAP[e.key.toLowerCase()];
+  if (lane !== undefined) processHit(lane, performance.now());
+});
+
+// ── MIDI ──────────────────────────────────────────────────
+async function setupMidi() {
+  try {
+    await initMidi(msg => {
+      if (state !== STATES.PLAYING || inputMode !== 'midi') return;
+      onMidiMessage(msg);
+    });
+    populateMidiDevices();
+    onDeviceChange(() => populateMidiDevices());
+  } catch (e) {
+    const sel = document.getElementById('midi-device-select');
+    if (sel) sel.innerHTML = '<option>MIDI not available (use keyboard)</option>';
+  }
+}
+
+function populateMidiDevices() {
+  const sel = document.getElementById('midi-device-select');
+  if (!sel) return;
+  const list = getInputList();
+  sel.innerHTML = list.length
+    ? list.map((d, i) => `<option value="${i}">${escHtml(d.name)}</option>`).join('')
+    : '<option value="">No MIDI devices found</option>';
+}
+
+// ── UI wiring ─────────────────────────────────────────────
+const acousticStatus = document.getElementById('acoustic-status');
+const acousticSensGroup = document.getElementById('acoustic-sensitivity-group');
+
+async function switchInputMode(mode) {
+  // Stop previous acoustic if active
+  if (inputMode === 'acoustic' && mode !== 'acoustic') {
+    stopAcousticDetection();
+    if (acousticStatus) { acousticStatus.style.display = 'none'; }
+    if (acousticSensGroup) acousticSensGroup.style.display = 'none';
+  }
+
+  inputMode = mode;
+
+  if (mode === 'midi') {
+    await setupMidi();
+    if (acousticStatus) acousticStatus.style.display = 'none';
+    if (acousticSensGroup) acousticSensGroup.style.display = 'none';
+  } else if (mode === 'acoustic') {
+    if (acousticSensGroup) acousticSensGroup.style.display = '';
+    if (acousticStatus) {
+      acousticStatus.style.display = '';
+      acousticStatus.textContent = '🎙️ Requesting microphone access…';
+      acousticStatus.className = 'acoustic-status acoustic-pending';
+    }
+    try {
+      await startAcousticDetection((lane) => {
+        if (state === STATES.PLAYING) processHit(lane, performance.now());
+      });
+      if (acousticStatus) {
+        acousticStatus.textContent = '🎙️ Microphone active — play your drums!';
+        acousticStatus.className = 'acoustic-status acoustic-active';
+      }
+    } catch (err) {
+      if (acousticStatus) {
+        acousticStatus.textContent = '❌ ' + err.message;
+        acousticStatus.className = 'acoustic-status acoustic-error';
+      }
+      inputMode = 'keyboard'; // fallback
+    }
+  } else {
+    if (acousticStatus) acousticStatus.style.display = 'none';
+    if (acousticSensGroup) acousticSensGroup.style.display = 'none';
+  }
+}
+
+document.querySelectorAll('.input-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.input-opt').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    switchInputMode(btn.dataset.input);
+  });
+});
+
+// Acoustic sensitivity slider
+document.getElementById('acoustic-sensitivity')?.addEventListener('input', function() {
+  document.getElementById('acoustic-sensitivity-label').textContent = this.value;
+  setAcousticSensitivity(parseInt(this.value, 10));
+});
+
+document.getElementById('btn-pause')?.addEventListener('click', pauseGame);
+document.getElementById('btn-resume')?.addEventListener('click', resumeGame);
+document.getElementById('btn-quit')?.addEventListener('click', () => {
+  exitFullscreenApi();
+  unlockOrientation();
+  state = STATES.IDLE;
+  cancelAnimationFrame(rafId);
+  stopAudio();
+  showScreen('menu');
+});
+document.getElementById('btn-to-menu')?.addEventListener('click', () => {
+  exitFullscreenApi();
+  unlockOrientation();
+  state = STATES.IDLE;
+  showScreen('menu');
+});
+document.getElementById('btn-fullscreen-exit')?.addEventListener('click', () => {
+  exitFullscreenApi();
+  unlockOrientation();
+  state = STATES.IDLE;
+  cancelAnimationFrame(rafId);
+  stopAudio();
+  showScreen('menu');
+});
+document.getElementById('btn-retry')?.addEventListener('click', () => {
+  if (currentSong) selectSong(currentSong);
+});
+
+const settingsBtn = document.getElementById('btn-settings');
+const settingsScreen = document.getElementById('screen-settings');
+settingsBtn?.addEventListener('click', () => {
+  settingsScreen.classList.toggle('active');
+});
+document.getElementById('close-settings')?.addEventListener('click', () => {
+  settingsScreen.classList.remove('active');
+});
+
+const speedSlider = document.getElementById('speed-slider');
+const speedLabel  = document.getElementById('speed-label');
+speedSlider?.addEventListener('input', () => {
+  scrollTimeWindow = parseInt(speedSlider.value, 10);
+  speedLabel.textContent = scrollTimeWindow + ' ms';
+});
+
+document.getElementById('hit-sound-toggle')?.addEventListener('change', e => {
+  hitSoundEnabled = e.target.checked;
+});
+
+document.getElementById('midi-device-select')?.addEventListener('change', e => {
+  selectInput(parseInt(e.target.value, 10));
+});
+
+document.getElementById('midi-channel')?.addEventListener('change', e => {
+  setChannelFilter(parseInt(e.target.value, 10));
+});
+
+// ── Boot ──────────────────────────────────────────────────
+showScreen('menu');
+loadSongLibrary();

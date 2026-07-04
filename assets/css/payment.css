@@ -1,0 +1,97 @@
+/* Payment, cancel, success */
+
+.payment-card, .success-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  margin: 2rem auto;
+}
+
+.payment-plan-header { text-align: center; margin-bottom: 1.5rem; }
+.payment-plan-header h1 { margin-bottom: .5rem; }
+
+.price-display {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.price-display span { font-size: 1rem; font-weight: 400; color: var(--text-dim); }
+
+.membership-status {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .85rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.membership-status strong { display: block; font-size: .95rem; }
+.membership-status span   { font-size: .85rem; color: var(--text-dim); }
+
+.status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.active  { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.status-dot.expired { background: var(--danger); }
+
+.plan-features {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  font-size: .95rem;
+  color: var(--text-dim);
+}
+
+.dummy-payment .dummy-notice {
+  background: rgba(245,158,11,.1);
+  border: 1px solid rgba(245,158,11,.3);
+  border-radius: var(--radius);
+  padding: .65rem 1rem;
+  font-size: .85rem;
+  color: #fcd34d;
+  margin-bottom: 1.25rem;
+}
+
+.fake-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.cancel-section {
+  margin-top: 1.5rem;
+  text-align: center;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.cancel-note { font-size: .82rem; color: var(--text-dim); margin-top: .4rem; }
+
+/* Success */
+.success-card { text-align: center; padding: 3rem 2rem; }
+.success-icon { font-size: 3.5rem; margin-bottom: 1rem; }
+.success-card h1 { margin-bottom: .5rem; }
+.success-card p  { color: var(--text-dim); margin-bottom: 1.5rem; }
+.success-card .btn + .btn { margin-top: 0; }
+
+/* Cancel confirm */
+.cancel-info {
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  font-size: .95rem;
+}
+.btn-danger { background: var(--danger); color: #fff; }

@@ -1,0 +1,52 @@
+Options -Indexes
+
+# ── Force HTTPS ────────────────────────────────────────────
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# ── Security headers ───────────────────────────────────────
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options       "nosniff"
+  Header always set X-Frame-Options              "SAMEORIGIN"
+  Header always set X-XSS-Protection            "1; mode=block"
+  Header always set Referrer-Policy             "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy          "geolocation=(), microphone=(), camera=()"
+  Header always set Content-Security-Policy     "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://ip-api.com; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self';"
+  Header always set Strict-Transport-Security   "max-age=31536000; includeSubDomains"
+</IfModule>
+
+# ── Block direct access to sensitive PHP files (Apache 2.4 / LiteSpeed) ────
+# Primary protection for includes/ lives in includes/.htaccess (Require all
+# denied). These per-file rules are belt-and-suspenders, matched by basename
+# anywhere in the tree, using modern syntax with a 2.2 fallback.
+<FilesMatch "^(config|db|auth|security|access|geo|nav|bootstrap|header|footer|install|oauth|social-buttons)\.php$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# ── Block direct web access to includes/ (mod_rewrite — confirmed active) ──
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^includes/ - [F,L]
+</IfModule>
+
+# ── Block PHP execution in uploads ─────────────────────────
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^uploads/.*\.php$ - [F,L]
+</IfModule>
+
+# ── Prevent hotlinking of audio files ─────────────────────
+<IfModule mod_rewrite.c>
+  RewriteCond %{HTTP_REFERER} !^$
+  RewriteCond %{HTTP_REFERER} !^https://members\.zachalcasid\.com [NC]
+  RewriteRule \.(mp3|wav|ogg|flac)$ - [F,L]
+</IfModule>
