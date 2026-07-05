@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/sessions.php';
+require_once __DIR__ . '/includes/programs.php';
 
 $user = requireLogin();
 
@@ -8,6 +9,14 @@ $user = requireLogin();
 $sq = db()->prepare('SELECT * FROM students WHERE user_id = ? OR email = ? ORDER BY user_id IS NULL LIMIT 1');
 $sq->execute([$user['id'], $user['email']]);
 $student = $sq->fetch() ?: null;
+
+// One-on-one sessions are only for students whose enrollment includes them
+// (payment confirmed). Free-trial / web-access students have no session access,
+// so keep the page itself unreachable — not just hidden from the nav.
+if (!studentHasSessions($student)) {
+    header('Location: ' . SITE_URL . '/dashboard.php');
+    exit;
+}
 
 $message = ''; $error = '';
 
@@ -193,14 +202,14 @@ require __DIR__ . '/includes/header.php';
   <?php if (!$upcoming): ?>
     <p class="field-hint">You have no upcoming sessions booked.</p>
   <?php else: ?>
-    <table class="data-table">
+    <table class="data-table table-cards">
       <thead><tr><th>Date &amp; Time</th><th>Duration</th><th>Manage</th></tr></thead>
       <tbody>
       <?php foreach ($upcoming as $b): ?>
         <tr>
-          <td><?= htmlspecialchars(fmtSlot($b['starts_at'])) ?></td>
-          <td><?= (int) $b['duration_min'] ?> min</td>
-          <td>
+          <td data-label="Date &amp; Time"><?= htmlspecialchars(fmtSlot($b['starts_at'])) ?></td>
+          <td data-label="Duration"><?= (int) $b['duration_min'] ?> min</td>
+          <td data-label="Manage" class="cell-actions">
             <?php if (!canReschedule($b['starts_at'])): ?>
               <span class="field-hint">Locked (within <?= RESCHEDULE_CUTOFF_HOURS ?>h)</span>
             <?php else: ?>
@@ -238,14 +247,14 @@ require __DIR__ . '/includes/header.php';
   <!-- Past sessions -->
   <?php if ($past): ?>
     <h2>Past Sessions</h2>
-    <table class="data-table">
+    <table class="data-table table-cards">
       <thead><tr><th>Date &amp; Time</th><th>Duration</th><th>Status</th></tr></thead>
       <tbody>
       <?php foreach ($past as $b): ?>
         <tr>
-          <td><?= htmlspecialchars(fmtSlot($b['starts_at'])) ?></td>
-          <td><?= (int) $b['duration_min'] ?> min</td>
-          <td><?= htmlspecialchars(ucfirst(str_replace('_', ' ', $b['status']))) ?></td>
+          <td data-label="Date &amp; Time"><?= htmlspecialchars(fmtSlot($b['starts_at'])) ?></td>
+          <td data-label="Duration"><?= (int) $b['duration_min'] ?> min</td>
+          <td data-label="Status"><?= htmlspecialchars(ucfirst(str_replace('_', ' ', $b['status']))) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>

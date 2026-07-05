@@ -5,12 +5,19 @@ import { initRenderer, drawFrame, addFlash, addJudgment } from './renderer.js';
 import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING } from './scoring.js?v=20260702';
 import { playHitClick, playCountdownBeep, resumeContext } from './audio.js';
 import { loadAudioUrl, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js';
-import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive } from './acoustic.js';
-import { song as demoSong } from './songs/demo.js';
+import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive,
+         startCalibration, cancelCalibration, isLaneCalibrated, clearLane } from './acoustic.js?v=20260707';
+import { song as demoSong } from './songs/demo.js?v=20260705';
+import { song as rockSong } from './songs/rock-basics.js?v=20260705';
 
-demoSong.id      = 'demo';
-demoSong.artist  = 'MS Drums';
-demoSong.builtin = true;
+demoSong.id           = 'demo';
+demoSong.artist       = 'MS Drums';
+demoSong.builtin      = true;
+demoSong.placementTest = true;   // the standardized exercise used by the placement test
+
+rockSong.id      = 'rock-basics';
+rockSong.artist  = 'MS Drums';
+rockSong.builtin = true;
 
 // ── State ─────────────────────────────────────────────────
 const STATES = { IDLE: 0, COUNTDOWN: 2, PLAYING: 3, PAUSED: 4, RESULTS: 5 };
@@ -25,7 +32,7 @@ let currentSong      = demoSong;
 let songDuration     = 0;   // effective length (ms) for this playthrough
 let pausedPosition   = 0;
 let allSongs         = [];
-let inputMode        = 'keyboard'; // 'midi' | 'keyboard'
+let inputMode        = ''; // 'midi' | 'acoustic' — chosen from the menu before playing
 
 // Placement-test config comes from a data element in game.php (the site CSP
 // blocks inline scripts, so we can't set window globals there).
@@ -73,7 +80,7 @@ async function loadSongLibrary() {
     if (res.ok) custom = await res.json();
   } catch (e) { /* network error, just show demo */ }
 
-  allSongs = [{ ...demoSong, builtin: true }, ...custom];
+  allSongs = [{ ...demoSong, builtin: true }, { ...rockSong, builtin: true }, ...custom];
   renderSongList();
 }
 
@@ -82,7 +89,7 @@ function renderSongList() {
   list.innerHTML = '';
 
   // Placement test uses a single standardized exercise so results are comparable.
-  const songs = DRUM_TEST_MODE ? allSongs.filter(s => s.builtin) : allSongs;
+  const songs = DRUM_TEST_MODE ? allSongs.filter(s => s.placementTest) : allSongs;
   if (DRUM_TEST_MODE) {
     const heading = document.querySelector('#song-library h2');
     if (heading) heading.textContent = 'Placement Test — play this exercise';
@@ -120,6 +127,14 @@ function unlockOrientation() {
 }
 
 async function selectSong(song) {
+  // Playing needs an input (e-drums or mic). Require one before starting.
+  if (inputMode !== 'midi' && inputMode !== 'acoustic') {
+    const msg = document.getElementById('input-required-msg');
+    if (msg) msg.style.display = '';
+    document.getElementById('menu-input-select')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
   enterFullscreen(); // must fire synchronously in the click handler — Safari drops the gesture after any await or timer
   lockLandscape();
   currentSong = song;
@@ -198,7 +213,7 @@ function gameLoop(now) {
     addJudgment('MISS', lane);
   });
 
-  // Keyboard hits
+  // MIDI hits (buffered from the device between frames)
   const hits = flushHits();
   hits.forEach(hit => processHit(hit.lane, now));
 
@@ -346,21 +361,9 @@ function resumeGame() {
   rafId = requestAnimationFrame(gameLoop);
 }
 
-// ── Keyboard input ────────────────────────────────────────
-// 10 lanes → home row A through ; (10 keys)
-const KEY_LANE_MAP = {
-  'a': 0,  // Kick
-  's': 1,  // Snare
-  'd': 2,  // Hi-Hat
-  'f': 3,  // Hi Tom 1
-  'g': 4,  // Hi Tom 2
-  'h': 5,  // Mid Tom
-  'j': 6,  // Floor Tom
-  'k': 7,  // 16" Crash
-  'l': 8,  // 18" Crash
-  ';': 9,  // 22" Ride
-};
-
+// ── Keyboard: pause/resume only ───────────────────────────
+// Playing is e-drums (MIDI) or acoustic mic only — the keyboard no longer
+// triggers hits, but Escape still pauses/resumes.
 document.addEventListener('keydown', e => {
   if (e.repeat) return;
   resumeContext();
@@ -368,13 +371,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (state === STATES.PLAYING) pauseGame();
     else if (state === STATES.PAUSED) resumeGame();
-    return;
   }
-
-  if (state !== STATES.PLAYING || inputMode !== 'keyboard') return;
-
-  const lane = KEY_LANE_MAP[e.key.toLowerCase()];
-  if (lane !== undefined) processHit(lane, performance.now());
 });
 
 // ── MIDI ──────────────────────────────────────────────────
@@ -388,7 +385,7 @@ async function setupMidi() {
     onDeviceChange(() => populateMidiDevices());
   } catch (e) {
     const sel = document.getElementById('midi-device-select');
-    if (sel) sel.innerHTML = '<option>MIDI not available (use keyboard)</option>';
+    if (sel) sel.innerHTML = '<option>MIDI not available (use Acoustic mic instead)</option>';
   }
 }
 
@@ -404,6 +401,86 @@ function populateMidiDevices() {
 // ── UI wiring ─────────────────────────────────────────────
 const acousticStatus = document.getElementById('acoustic-status');
 const acousticSensGroup = document.getElementById('acoustic-sensitivity-group');
+
+// Acoustic requires calibrating at least these before play (Kick, Snare, Hi-Hat).
+const REQUIRED_LANES = [0, 1, 2];
+// Drums offered in the calibration list (covers every lane the built-in songs use;
+// 18" crash / lane 8 is omitted as no built-in song uses it). Students calibrate
+// only the drums they actually have — uncalibrated lanes simply won't fire.
+const CAL_LANES = [0, 1, 2, 3, 4, 5, 6, 7, 9];
+
+function requiredCalibrated() {
+  return REQUIRED_LANES.every(l => isLaneCalibrated(l));
+}
+
+// Students configure their input first. E-drums arm on selection; acoustic arms
+// only once the required drums are calibrated. The song library stays locked (with
+// a context-appropriate hint) until then.
+function syncInputGate() {
+  const lib = document.getElementById('song-library');
+  const msg = document.getElementById('input-required-msg');
+  const cal = document.getElementById('acoustic-calibration');
+
+  let armed = false, hint = '🔒 Choose your input above to unlock the song library.';
+  if (inputMode === 'midi') {
+    armed = true;
+  } else if (inputMode === 'acoustic') {
+    armed = requiredCalibrated();
+    hint  = '🎚️ Calibrate your Kick, Snare and Hi-Hat below to unlock the song library.';
+  }
+
+  if (cal) cal.style.display = (inputMode === 'acoustic') ? '' : 'none';
+  if (lib) lib.style.display = armed ? '' : 'none';
+  if (msg) { msg.style.display = armed ? 'none' : ''; if (!armed) msg.textContent = hint; }
+}
+
+// ── Acoustic calibration UI ───────────────────────────────
+let calibrating = false;
+
+function buildCalibrationList() {
+  const list = document.getElementById('cal-list');
+  if (!list) return;
+  const names = getLaneNames();
+  list.innerHTML = '';
+
+  CAL_LANES.forEach(lane => {
+    const done     = isLaneCalibrated(lane);
+    const required = REQUIRED_LANES.includes(lane);
+    const row = document.createElement('div');
+    row.className = 'cal-row' + (done ? ' cal-done' : '');
+    row.dataset.lane = lane;
+    row.innerHTML = `
+      <span class="cal-name">${escHtml(names[lane] || ('Lane ' + lane))}${required ? '<span class="cal-req">required</span>' : ''}</span>
+      <span class="cal-state ${done ? 'ok' : ''}">${done ? '✓ Calibrated' : 'Not set'}</span>
+      <button class="cal-btn">${done ? 'Redo' : 'Calibrate'}</button>
+      ${done ? '<button class="cal-btn cal-btn-clear">Clear</button>' : ''}
+    `;
+    row.querySelector('.cal-btn').addEventListener('click', () => beginCalibrate(lane, row));
+    const clr = row.querySelector('.cal-btn-clear');
+    if (clr) clr.addEventListener('click', () => { clearLane(lane); buildCalibrationList(); syncInputGate(); });
+    list.appendChild(row);
+  });
+}
+
+function beginCalibrate(lane, row) {
+  if (calibrating) return;
+  calibrating = true;
+  document.querySelectorAll('.cal-row').forEach(r => r.classList.remove('cal-listening'));
+  row.classList.add('cal-listening');
+  const stateEl = row.querySelector('.cal-state');
+  stateEl.classList.remove('ok');
+  stateEl.textContent = 'Hit it now… 0/4';
+
+  startCalibration(
+    lane,
+    (count, needed) => { stateEl.textContent = `Hit it now… ${count}/${needed}`; },
+    () => { calibrating = false; buildCalibrationList(); syncInputGate(); }
+  ).catch(err => {
+    calibrating = false;
+    row.classList.remove('cal-listening');
+    stateEl.textContent = '❌ ' + err.message;
+  });
+}
 
 async function switchInputMode(mode) {
   // Stop previous acoustic if active
@@ -431,20 +508,24 @@ async function switchInputMode(mode) {
         if (state === STATES.PLAYING) processHit(lane, performance.now());
       });
       if (acousticStatus) {
-        acousticStatus.textContent = '🎙️ Microphone active — play your drums!';
+        acousticStatus.textContent = '🎙️ Microphone active — calibrate your kit below.';
         acousticStatus.className = 'acoustic-status acoustic-active';
       }
+      buildCalibrationList();
     } catch (err) {
       if (acousticStatus) {
         acousticStatus.textContent = '❌ ' + err.message;
         acousticStatus.className = 'acoustic-status acoustic-error';
       }
-      inputMode = 'keyboard'; // fallback
+      inputMode = ''; // acoustic failed — no input armed until the user picks again
     }
   } else {
     if (acousticStatus) acousticStatus.style.display = 'none';
     if (acousticSensGroup) acousticSensGroup.style.display = 'none';
   }
+
+  // Lock/unlock the song library based on the final armed input.
+  syncInputGate();
 }
 
 document.querySelectorAll('.input-opt').forEach(btn => {
@@ -519,4 +600,5 @@ document.getElementById('midi-channel')?.addEventListener('change', e => {
 
 // ── Boot ──────────────────────────────────────────────────
 showScreen('menu');
+syncInputGate();     // song library starts locked until an input is chosen
 loadSongLibrary();

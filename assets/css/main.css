@@ -67,10 +67,25 @@ p  { margin-bottom: .75rem; }
   text-decoration: none;
 }
 .drum-icon { margin-right: .3rem; }
+/* Full brand name by default; the short "ZADA" swaps in on mobile (see media query). */
+.brand-abbr { display: none; }
 .nav-links  { display: flex; gap: 1.25rem; list-style: none; flex: 1; }
 .nav-links a { color: var(--text-dim); font-size: .95rem; }
 .nav-links a:hover, .nav-links a.active { color: var(--text); text-decoration: none; }
 .nav-user  { display: flex; align-items: center; gap: .75rem; margin-left: auto; color: var(--text-dim); font-size: .9rem; }
+/* Mobile menu toggle — hidden on desktop, shown via the media query below. */
+.nav-toggle { display: none; }
+.nav-burger {
+  display: none;
+  order: 1;
+  margin-left: auto;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text);
+  cursor: pointer;
+  padding: .1rem .5rem;
+  user-select: none;
+}
 
 /* ── Buttons ──────────────────────────────────────────────── */
 .btn {
@@ -227,9 +242,94 @@ textarea { resize: vertical; min-height: 100px; }
   margin-top: 4rem;
 }
 
+/* ── Responsive: tablet & mobile ──────────────────────────── */
+@media (max-width: 768px) {
+  .top-nav { flex-wrap: wrap; gap: .5rem 1rem; }
+  .nav-brand { margin-right: auto; }
+
+  /* Only the app nav (which contains the hamburger toggle) collapses. The
+     landing-page nav has no .nav-toggle, so its Log In / Sign Up links — and any
+     other toggle-less nav — stay visible. */
+  .nav-burger { display: inline-flex; }
+  .nav-toggle ~ .nav-links {
+    order: 3;
+    flex: 0 0 100%;
+    flex-direction: column;
+    gap: 0;
+    display: none;
+  }
+  .nav-toggle:checked ~ .nav-links { display: flex; }
+  .nav-toggle ~ .nav-links li { width: 100%; }
+  .nav-toggle ~ .nav-links a {
+    display: block;
+    padding: .7rem .25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .nav-toggle ~ .nav-user {
+    order: 4;
+    flex: 0 0 100%;
+    margin-left: 0;
+    justify-content: space-between;
+    padding-top: .5rem;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .nav-toggle:checked ~ .nav-user { display: flex; }
+}
+
 @media (max-width: 640px) {
+  html { font-size: 15px; }
+  .container { padding: 1.5rem 1rem; }
+
+  /* Shorten the brand to "ZADA" on phones. */
+  .brand-name { display: none; }
+  .brand-abbr { display: inline; }
   .form-row { grid-template-columns: 1fr; }
-  .top-nav  { flex-wrap: wrap; gap: .75rem; }
-  .nav-links{ gap: .75rem; }
   h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+
+  /* 16px inputs stop iOS Safari from auto-zooming on focus. */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="url"], input[type="tel"],
+  input[type="date"], select, textarea { font-size: 16px; }
+
+  /* Wrapping action rows so buttons never overflow. */
+  .row-actions { flex-wrap: wrap; }
+  .btn { white-space: normal; }
+
+  /* Card-ify tables marked .table-cards: each row becomes a stacked card with
+     the column name (from data-label) shown beside each value. */
+  .table-cards thead { display: none; }
+  .table-cards tr {
+    display: block;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: .75rem;
+    padding: .5rem .9rem;
+  }
+  .table-cards tr:hover td { background: transparent; }
+  .table-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: .4rem 0;
+    border: none;
+    text-align: right;
+  }
+  .table-cards td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-dim);
+    text-align: left;
+  }
+  /* Cells holding controls stack the label above, controls full width. */
+  .table-cards td.cell-actions {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+  }
+  .table-cards td.cell-actions select { width: 100%; }
 }

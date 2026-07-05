@@ -6,9 +6,9 @@
  */
 function coursePrograms(): array {
     return [
-        'ONE ON ONE (F2F) - ₱9,000'    => 9000,
-        'ONE ON ONE (ONLINE) - ₱2,000' => 2000,
-        'ONE ON ONE (ONLINE) - ₱9,000' => 9000,
+        '1 on 1 (6 F2F Sessions) - ₱9,000'    => 9000,
+        '1 on 1 (1 Online Session) - ₱2,000'  => 2000,
+        '1 on 1 (6 Online Sessions) - ₱9,000' => 9000,
     ];
 }
 
@@ -19,9 +19,16 @@ function coursePrograms(): array {
  */
 function programSessionCredits(): array {
     return [
+        '1 on 1 (6 F2F Sessions) - ₱9,000'    => 6,
+        '1 on 1 (1 Online Session) - ₱2,000'  => 1,
+        '1 on 1 (6 Online Sessions) - ₱9,000' => 6,
+        // Legacy program names (older enrollments) — kept so their session
+        // credits still resolve on admin approval.
         'ONE ON ONE (F2F) - ₱9,000'    => 6,
         'ONE ON ONE (ONLINE) - ₱2,000' => 1,
         'ONE ON ONE (ONLINE) - ₱9,000' => 6,
+        '1 on 1 (1 Session) - ₱2,000'  => 1,
+        '1 on 1 (6 Session) - ₱9,000'  => 6,
     ];
 }
 
@@ -40,7 +47,23 @@ const WEB_ACCESS_PROGRAM = 'Website access';
 function studentHasSessions(?array $student): bool {
     if (!$student) return true;
     if ((int) ($student['session_credits'] ?? 0) > 0) return true;
-    return creditsForProgram(trim((string) ($student['program'] ?? ''))) > 0;
+    // A session-granting program only unlocks the Sessions area once payment is
+    // confirmed — free-trial / unpaid enrollees don't get session access yet.
+    // (Callers must SELECT payment_status alongside program + session_credits.)
+    if (creditsForProgram(trim((string) ($student['program'] ?? ''))) > 0) {
+        return studentPaymentConfirmed($student);
+    }
+    return false;
+}
+
+// True once a student's enrollment payment has been confirmed by an admin.
+// Mirrors the "paid" statuses used in admin/students.php and my-membership.php.
+function studentPaymentConfirmed(?array $student): bool {
+    return $student && in_array(
+        $student['payment_status'] ?? '',
+        ['Yes', 'yes', 'Paid', 'paid', 'Done', 'done'],
+        true
+    );
 }
 
 // Give a self-signup (direct registration or social login) a Website-access

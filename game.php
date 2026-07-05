@@ -25,6 +25,31 @@ require __DIR__ . '/includes/header.php';
   .results-ai .ai-feedback-body ul { margin: .25rem 0 .5rem 1.1rem; }
   .results-ai .ai-loading { opacity: .8; }
   .results-ai .ai-error { color: #ff8a8a; }
+  .input-required { color: #fca5a5; margin-top: .85rem; font-weight: 600; }
+
+  /* Acoustic calibration panel */
+  .acoustic-cal { margin-top: 1rem; max-width: 34rem; }
+  .acoustic-cal h3 { margin: 0 0 .25rem; }
+  .cal-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+  .cal-row {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .55rem .75rem;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px;
+  }
+  .cal-row.cal-done { border-color: rgba(34,197,94,.5); background: rgba(34,197,94,.08); }
+  .cal-row.cal-listening { border-color: #eab308; background: rgba(234,179,8,.1); }
+  .cal-name { font-weight: 600; }
+  .cal-req  { font-size: .7rem; color: #fca5a5; margin-left: .25rem; }
+  .cal-state { margin-left: auto; font-size: .82rem; color: var(--text-dim, #9ca3af); }
+  .cal-state.ok { color: #4ade80; }
+  .cal-btn {
+    background: #4f46e5; color: #fff; border: none; border-radius: 6px;
+    padding: .35rem .8rem; font-size: .82rem; font-weight: 600; cursor: pointer;
+  }
+  .cal-btn:hover { background: #4338ca; }
+  .cal-btn.cal-btn-clear { background: transparent; border: 1px solid rgba(255,255,255,.2); color: var(--text-dim, #9ca3af); }
 </style>
 
 <!-- ── Rotate overlay (portrait mobile/tablet) ──────────── -->
@@ -58,16 +83,20 @@ require __DIR__ . '/includes/header.php';
         <span>Acoustic Drums</span>
         <small>Via microphone</small>
       </button>
-      <button class="input-opt" data-input="keyboard">
-        <span class="input-icon">⌨️</span>
-        <span>Keyboard</span>
-        <small>A S D F G H J K L ;</small>
-      </button>
     </div>
     <div id="acoustic-status" class="acoustic-status" style="display:none"></div>
+
+    <!-- Acoustic calibration: teach the app each drum. Shown when Acoustic is chosen. -->
+    <div id="acoustic-calibration" class="acoustic-cal" style="display:none">
+      <h3>🎚️ Calibrate your kit</h3>
+      <p class="field-hint">Tap a drum below, then hit it <strong>4 times</strong> so the app learns its sound. The <strong>required</strong> drums must be done before you can play; add cymbals/toms if your kit has them.</p>
+      <div id="cal-list" class="cal-list"></div>
+    </div>
+
+    <div id="input-required-msg" class="input-required">🔒 Choose your input above to unlock the song library.</div>
   </div>
 
-  <div id="song-library" class="song-library">
+  <div id="song-library" class="song-library" style="display:none">
     <h2>Song Library</h2>
     <div id="song-list" class="song-list">
       <div class="loading">Loading songs…</div>
@@ -168,5 +197,5 @@ require __DIR__ . '/includes/header.php';
 <?php if (!empty($_GET['test'])): ?>
 <div id="drum-test-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260703"></script>
+<script type="module" src="/assets/js/game/main.js?v=20260707"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

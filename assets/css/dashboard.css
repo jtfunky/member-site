@@ -99,3 +99,9 @@
 .conn-status.conn-on { color: var(--success, #22c55e); }
 .conn-note { color: var(--text-dim); font-size: .78rem; font-style: italic; }
 .conn-form { margin: 0 0 0 auto; }   /* push the action button to the right */
+
+@media (max-width: 640px) {
+  .form-actions-row { flex-wrap: wrap; }
+  .conn-row { flex-wrap: wrap; }
+  .conn-form { margin-left: 0; }     /* let the action button drop below on mobile */
+}

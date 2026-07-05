@@ -22,7 +22,7 @@ $welcome  = isset($_GET['welcome']);
 // Web-access-only students don't have one-on-one sessions; session students do.
 $student = null;
 try {
-    $st = db()->prepare('SELECT program, session_credits FROM students WHERE user_id = ? LIMIT 1');
+    $st = db()->prepare('SELECT program, session_credits, payment_status FROM students WHERE user_id = ? LIMIT 1');
     $st->execute([(int) $user['id']]);
     $student = $st->fetch() ?: null;
 } catch (\Throwable $e) { /* students table optional */ }
@@ -73,7 +73,7 @@ require __DIR__ . '/includes/header.php';
   <a href="<?= $hasAccess ? '/game.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
     <div class="tile-icon">🥁</div>
     <h3>Drum Game</h3>
-    <p>Play songs with your e-drum or keyboard</p>
+    <p>Play songs with your e-drum kit or acoustic drums</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
   </a>
 

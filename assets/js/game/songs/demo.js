@@ -1,5 +1,9 @@
 // Demo Beat — 120 BPM, 60 seconds, ~500+ notes
-// Lanes: 0=Kick, 1=Snare, 2=HiHat, 3=Tom1, 4=Tom2, 5=Tom3, 6=Crash, 7=Ride
+// Lanes follow the canonical 10-lane engine map (see input.js getLaneNames):
+// 0=Kick 1=Snare 2=HiHat 3=HiTom1 4=HiTom2 5=MidTom 6=FloorTom
+// 7=16"Crash 8=18"Crash 9=22"Ride
+const CRASH = 7;   // 16" Crash
+const RIDE  = 9;   // 22" Ride
 
 const BPM = 120;
 const BEAT = 60000 / BPM;   // 500ms
@@ -34,7 +38,7 @@ for (let m = 0; m < 4; m++) {
 for (let m = 0; m < 4; m++) {
   const s = 8000 + m * 4 * BEAT;
   const extras = [];
-  if (m === 0) extras.push([0, 6]); // crash bar 5
+  if (m === 0) extras.push([0, CRASH]); // crash bar 5
   if (m === 2) {
     // tom fill: T1 T2 T3
     extras.push([2, 3], [2.5, 4], [3, 5], [3.5, 5]);
@@ -50,7 +54,7 @@ for (let m = 0; m < 4; m++) {
 for (let m = 0; m < 4; m++) {
   const s = 16000 + m * 4 * BEAT;
   const extras = [];
-  if (m % 2 === 0) extras.push([0, 6]); // crash every 2 bars
+  if (m % 2 === 0) extras.push([0, CRASH]); // crash every 2 bars
   extras.push([1.5, 4], [3.5, 5]); // extra tom accents
   notes.push(...beat4(s, [0, 0.75, 2, 3.5], [1, 3], HH_8TH, extras));
 }
@@ -60,8 +64,8 @@ for (let m = 0; m < 4; m++) {
 const RIDE_PATTERN = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
 for (let m = 0; m < 4; m++) {
   const s = 24000 + m * 4 * BEAT;
-  const extras = RIDE_PATTERN.map(b => [b, 7]); // ride
-  if (m === 0) extras.push([0, 6]); // crash on section start
+  const extras = RIDE_PATTERN.map(b => [b, RIDE]); // ride
+  if (m === 0) extras.push([0, CRASH]); // crash on section start
   extras.push([1.5, 3], [3.5, 4]); // tom accents
   notes.push(...beat4(s, [0, 1.5, 2, 3], [1, 3], [], extras));
 }
@@ -72,7 +76,7 @@ const HH_16TH = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 
 for (let m = 0; m < 8; m++) {
   const s = 32000 + m * 4 * BEAT;
   const extras = [];
-  if (m === 0 || m === 4) extras.push([0, 6]); // crash section markers
+  if (m === 0 || m === 4) extras.push([0, CRASH]); // crash section markers
   // rotate tom accents
   const tomPairs = [[1.75, 3], [3.75, 4], [1.5, 5], [3.5, 3], [2.75, 4], [0.75, 5], [3.75, 3], [1.75, 5]];
   extras.push(tomPairs[m]);
@@ -84,14 +88,14 @@ for (let m = 0; m < 8; m++) {
 for (let m = 0; m < 6; m++) {
   const s = 48000 + m * 4 * BEAT;
   const extras = [];
-  if (m === 0) extras.push([0, 6]); // opening crash
+  if (m === 0) extras.push([0, CRASH]); // opening crash
   // 16th-note tom runs on beat 4
   if (m < 4) {
     extras.push([3, 3], [3.25, 4], [3.5, 5], [3.75, 3]);
   } else {
     // Final 2 bars: continuous tom rolls
     for (let i = 0; i < 16; i++) extras.push([i * 0.25, 3 + (i % 3)]);
-    extras.push([0, 6]); // final crash
+    extras.push([0, CRASH]); // final crash
   }
   notes.push(...beat4(s, [0, 0.75, 2, 3], [1, 3], HH_16TH, extras));
 }

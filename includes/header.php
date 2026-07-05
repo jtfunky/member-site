@@ -20,8 +20,10 @@ $pageHead  = $pageHead  ?? '';
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $pageTitle ?></title>
-<?php foreach ($pageCss as $css): ?>
-<link rel="stylesheet" href="/assets/css/<?= $css ?>.css">
+<?php foreach ($pageCss as $css):
+    // Auto cache-bust via file mtime so CSS edits show up without manual versioning.
+    $cssV = @filemtime(__DIR__ . '/../assets/css/' . $css . '.css') ?: 1; ?>
+<link rel="stylesheet" href="/assets/css/<?= $css ?>.css?v=<?= $cssV ?>">
 <?php endforeach; ?>
 <?= $pageHead ?>
 </head>

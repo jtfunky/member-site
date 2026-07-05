@@ -49,6 +49,7 @@ require __DIR__ . '/../includes/header.php';
     <a href="/admin/students.php">Students</a>
     <a href="/admin/sessions.php">Sessions</a>
     <a href="/admin/songs.php" class="active">Songs</a>
+    <a href="/admin/song-editor.php">Chart Editor</a>
     <a href="/admin/placement-tests.php">Placement Tests</a>
   </div>
 </div>
@@ -83,19 +84,26 @@ require __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
+    <div class="alert alert-info" style="margin-bottom:1rem">
+      🥁 <strong>Best way to build a chart:</strong> open the
+      <a href="/admin/song-editor.php">Chart Editor</a> — load the track, play along on your
+      e-drums or keyboard to record all the hits, then click <strong>💾 Save to Library</strong>.
+      Use the form below only for quick metadata edits or pasting a notes array.
+    </div>
+
     <div class="form-group">
       <label>Audio File (MP3 / WAV / OGG)</label>
       <input type="file" id="dk-audio-file" accept="audio/*">
       <?php if ($editSong && $editSong['audio_filename']): ?>
       <p class="field-hint">Current: <strong><?= htmlspecialchars($editSong['audio_filename']) ?></strong></p>
       <?php endif; ?>
-      <span class="field-hint">📈 Auto-detect fills BPM, duration, and notes for <strong>kick, snare &amp; hi-hat only</strong> (lanes 0–2). Toms, crash &amp; ride can't be reliably detected from a mix — add those by hand or use the Chart Editor (tap pads / e-drums) for a full 8-lane chart.</span>
+      <span class="field-hint">Selecting a file stores the track and auto-fills its <strong>duration</strong> (and title, if empty). To chart the drum hits, use the <a href="/admin/song-editor.php">Chart Editor</a>.</span>
     </div>
 
     <div class="form-group">
       <label>Notes (JSON)</label>
       <textarea id="dk-notes" rows="8" class="font-mono" placeholder='[{"time":500,"lane":0},{"time":1000,"lane":1}]'><?= $editSong ? htmlspecialchars($editSong['notes'] ?? '[]') : '[]' ?></textarea>
-      <span class="field-hint">Array of {time: ms_from_start, lane} objects, sorted by time. Lanes: 0 kick · 1 snare · 2 hi-hat · 3 hi tom 1 · 4 hi tom 2 · 6 floor tom · 7 crash · 9 ride. Generate in the Chart Editor app, then click "Copy for Admin".</span>
+      <span class="field-hint">Array of {time: ms_from_start, lane} objects. Saved notes are validated and sorted automatically. Lanes: 0 kick · 1 snare · 2 hi-hat · 3 hi tom 1 · 4 hi tom 2 · 5 mid tom · 6 floor tom · 7 16&quot; crash · 8 18&quot; crash · 9 22&quot; ride. Generate in the <a href="/admin/song-editor.php">Chart Editor</a>, then click &quot;Copy for Admin&quot;.</span>
     </div>
 
     <div class="form-actions">
@@ -124,6 +132,7 @@ require __DIR__ . '/../includes/header.php';
     <td><?= $s['audio_filename'] ? '✅' : '—' ?></td>
     <td><?= date('M j, Y', strtotime($s['created_at'])) ?></td>
     <td class="row-actions">
+      <a href="/admin/song-editor.php?song=<?= $s['id'] ?>" class="btn btn-ghost btn-xs" title="Open in the Chart Editor (play along to edit hits)">🥁 Editor</a>
       <a href="/admin/songs.php?edit=<?= $s['id'] ?>" class="btn btn-ghost btn-xs">Edit</a>
       <button class="btn btn-danger btn-xs delete-song-btn" data-id="<?= $s['id'] ?>" data-title="<?= htmlspecialchars($s['title']) ?>">Delete</button>
     </td>
@@ -142,5 +151,5 @@ require __DIR__ . '/../includes/header.php';
 
 </main>
 
-<script src="/assets/js/admin.js"></script>
+<script src="/assets/js/admin.js?v=20260705"></script>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

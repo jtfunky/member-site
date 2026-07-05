@@ -12,7 +12,7 @@ define('DB_PASS', 'your_db_password');
 
 // ── Site ──────────────────────────────────────────────────
 define('SITE_URL', 'https://members.example.com');
-define('SITE_NAME', 'DrumKit');
+define('SITE_NAME', 'Zach Alcasid Drum Academy');
 define('MAIL_FROM', 'noreply@example.com');
 
 // ── AI feedback (Claude) ──────────────────────────────────

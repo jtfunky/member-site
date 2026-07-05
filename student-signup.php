@@ -35,9 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $age = (int) $d->diff(new DateTime('today'))->y;
         }
 
-        $proof = $_FILES['proof'] ?? ['error' => UPLOAD_ERR_NO_FILE];
-        $proofCheck = validateProofUpload($proof);
-
         if ($first === '' || $last === '') {
             $error = 'First and last name are required.';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -48,54 +45,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Please enter a valid date of birth.';
         } elseif (!isset($PROGRAMS[$prog])) {
             $error = 'Please choose a program.';
-        } elseif ($proofCheck !== true) {
-            $error = $proofCheck;
         } else {
-            // Create the (pending) login account first so we have a user id.
-            $result = createEnrolleeAccount($email, $pass, $first, $last);
+            // Create the login account with a free trial (instant game/content
+            // access). Session access stays locked — the enrollment is recorded
+            // as payment "Pending", and an admin confirms payment to grant credits.
+            $username = uniqueUsernameFromEmail($email);
+            $result   = registerUser($username, $email, $pass, $first, $last);
             if (is_string($result)) {
                 $error = $result;
             } else {
                 $userId = $result;
 
-                // Save the proof file.
-                if (!is_dir(UPLOAD_PROOF_DIR)) @mkdir(UPLOAD_PROOF_DIR, 0755, true);
-                $ext      = strtolower(pathinfo($proof['name'], PATHINFO_EXTENSION));
-                $filename = 'proof_' . $userId . '_' . time() . '.' . $ext;
-                if (!move_uploaded_file($proof['tmp_name'], UPLOAD_PROOF_DIR . $filename)) {
-                    // Roll back the account so the user can retry cleanly.
-                    db()->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
-                    $error = 'Could not save your proof file. Please try again.';
-                } else {
-                    $proofUrl = UPLOAD_PROOF_URL . $filename;
-                    $full     = $last . ', ' . $first . ($mi !== '' ? ' ' . $mi : '');
-                    $guardian = ($age < 18) ? trim($_POST['parent_guardian'] ?? '') : '';
-                    $dial     = preg_replace('/[^\d+]/', '', $_POST['country_code'] ?? '');
-                    $num      = preg_replace('/\D/', '', $_POST['phone'] ?? '');
-                    $phone    = $num !== '' ? trim($dial . ' ' . $num) : '';
-                    $country  = trim($_POST['address'] ?? '');
-                    if ($country === '') $country = getUserCountryName();
+                $full     = $last . ', ' . $first . ($mi !== '' ? ' ' . $mi : '');
+                $guardian = ($age < 18) ? trim($_POST['parent_guardian'] ?? '') : '';
+                $dial     = preg_replace('/[^\d+]/', '', $_POST['country_code'] ?? '');
+                $num      = preg_replace('/\D/', '', $_POST['phone'] ?? '');
+                $phone    = $num !== '' ? trim($dial . ' ' . $num) : '';
+                $country  = trim($_POST['address'] ?? '');
+                if ($country === '') $country = getUserCountryName();
 
-                    db()->prepare(
-                        'INSERT INTO students
-                           (user_id, enrolled_at, email, last_name, first_name, middle_initial,
-                            full_name, age, date_of_birth, parent_guardian, address, phone,
-                            experience, program, program_amount, currency, proof_url,
-                            payment_status, source_file)
-                         VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "PHP", ?, "Pending", "enroll")'
-                    )->execute([
-                        $userId, $email, $last, $first, $mi, $full, $age, $dob,
-                        $guardian, $country, $phone, $level, $prog,
-                        $PROGRAMS[$prog], $proofUrl,
-                    ]);
+                db()->prepare(
+                    'INSERT INTO students
+                       (user_id, enrolled_at, email, last_name, first_name, middle_initial,
+                        full_name, age, date_of_birth, parent_guardian, address, phone,
+                        experience, program, program_amount, currency,
+                        payment_status, source_file)
+                     VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "PHP", "Pending", "enroll")'
+                )->execute([
+                    $userId, $email, $last, $first, $mi, $full, $age, $dob,
+                    $guardian, $country, $phone, $level, $prog,
+                    $PROGRAMS[$prog],
+                ]);
 
-                    notifyAdmins('New enrollment submitted',
-                        "$full enrolled in \"$prog\" and uploaded proof of payment. Review it in Admin → Students.");
+                notifyAdmins('New enrollment submitted',
+                    "$full signed up for a free trial and enrolled interest in \"$prog\". Confirm payment in Admin → Students to unlock their one-on-one sessions.");
 
-                    loginById($userId);
-                    header('Location: ' . SITE_URL . '/my-membership.php?submitted=1');
-                    exit;
-                }
+                loginById($userId);
+                header('Location: ' . SITE_URL . '/my-membership.php?submitted=1');
+                exit;
             }
         }
     }
@@ -112,13 +99,12 @@ require __DIR__ . '/includes/header.php';
 <div class="auth-card auth-card--wide">
   <a class="auth-logo" href="/"><?= SITE_NAME ?></a>
   <h1>Student Enrollment</h1>
-  <p class="auth-sub">Fill in your details and upload your proof of payment. An admin will confirm your payment, then unlock your access.</p>
 
   <?php if ($error): ?>
   <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
   <?php endif; ?>
 
-  <form method="POST" action="/student-signup.php" enctype="multipart/form-data">
+  <form method="POST" action="/student-signup.php">
     <?= csrfField() ?>
 
     <div class="form-row">
@@ -216,13 +202,7 @@ require __DIR__ . '/includes/header.php';
       </div>
     </div>
 
-    <div class="form-group">
-      <label>Proof of Payment <span class="required">*</span></label>
-      <input type="file" name="proof" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" required>
-      <span class="field-hint">Image or PDF, up to 5 MB.</span>
-    </div>
-
-    <button type="submit" class="btn btn-primary btn-block">Submit Enrollment</button>
+    <button type="submit" class="btn btn-primary btn-block">Enroll</button>
   </form>
 
   <p class="auth-switch">Already enrolled? <a href="/login.php">Log in</a></p>

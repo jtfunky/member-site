@@ -17,7 +17,7 @@ require __DIR__ . '/includes/header.php';
 ?>
 
 <nav class="top-nav">
-  <div class="nav-brand"><span class="drum-icon">🥁</span> <?= SITE_NAME ?></div>
+  <div class="nav-brand"><span class="drum-icon">🥁</span> <span class="brand-name"><?= SITE_NAME ?></span><span class="brand-abbr">ZADA</span></div>
   <div class="nav-links">
     <a href="/login.php">Log In</a>
     <a href="/register.php" class="btn btn-primary btn-sm">Sign Up Free</a>
@@ -27,7 +27,7 @@ require __DIR__ . '/includes/header.php';
 <header class="hero">
   <div class="hero-inner">
     <h1>Play Drums.<br>Master the Beat.</h1>
-    <p class="hero-sub">A browser-based rhythm game that works with your electronic drum kit or keyboard. No download needed.</p>
+    <p class="hero-sub">A browser-based rhythm game that works with your electronic drum kit or acoustic drums. No download needed.</p>
     <a href="/register.php" class="btn btn-primary btn-lg">Start Free Trial — <?= TRIAL_DAYS_SELF ?> Days Free</a>
     <p class="hero-note">No credit card required for trial.</p>
   </div>

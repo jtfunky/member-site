@@ -1,133 +1,234 @@
 /**
- * Acoustic drum detection via microphone.
- * Uses Web Audio API AnalyserNode to detect transients in frequency bands
- * and map them to game lanes.
+ * Acoustic drum detection via microphone — with per-kit calibration.
  *
- * Detection works by tracking energy in each band; a hit is registered when
- * energy spikes above a rolling average (onset detection).
+ * The student "teaches" each drum by hitting it a few times; we store a
+ * loudness-normalized spectral fingerprint per lane (in localStorage). During
+ * play, every onset is matched to the nearest learned fingerprint and that lane
+ * fires. There is NO generic fallback — only calibrated drums are detected.
  */
 
 let audioCtx    = null;
 let analyser    = null;
 let stream      = null;
-let active      = false;
+let active      = false;              // is the analysis loop running
+let mode        = 'idle';             // 'idle' | 'play' | 'calibrate'
 let hitCallback = null;
 let animId      = null;
 
-// Frequency bands → lane mapping
-// Each band: [minHz, maxHz, lane, label]
-// Note: acoustic detection is approximate — toms and cymbals overlap in frequency.
-const BANDS = [
-  [20,    150,  0, 'Kick'],       // lane 0 — Kick (sub-bass thump)
-  [150,   450,  1, 'Snare'],      // lane 1 — Snare (crack/body)
-  [6000, 10000, 2, 'Hi-Hat'],     // lane 2 — Hi-Hat (tight metallic transient)
-  [450,   750,  3, 'Hi Tom 1'],   // lane 3 — Hi Tom 1
-  [750,  1200,  4, 'Hi Tom 2'],   // lane 4 — Hi Tom 2
-  [1200, 2200,  5, 'Mid Tom'],    // lane 5 — Mid Tom
-  [2200, 4500,  6, 'Floor Tom'],  // lane 6 — Floor Tom
-  [4500, 7000,  7, '16" Crash'],  // lane 7 — 16" Crash (bright attack)
-  [10000,14000, 8, '18" Crash'],  // lane 8 — 18" Crash (slightly darker wash)
-  [14000,20000, 9, '22" Ride'],   // lane 9 — 22" Ride (high shimmer)
-];
+// ── Fingerprint: log-spaced spectral bands, L2-normalized (shape, not loudness).
+const N_BANDS = 32;
+const F_MIN   = 40;
+const F_MAX   = 16000;
 
-// Per-band state for onset detection
-const bandState = BANDS.map(() => ({
-  avgEnergy:    0,
-  lastEnergy:   0,
-  cooldown:     0,   // frames until next hit allowed
-}));
+// Calibrated profiles: { [lane]: Float32Array(N_BANDS) } (unit vectors).
+let profiles = loadProfiles();
 
-// Sensitivity: multiplier over rolling average to count as a hit (lower = more sensitive)
+// ── Onset detection (global energy spike).
+let avgEnergy  = 0;
+let lastEnergy = 0;
+let cooldown   = 0;
 let sensitivity = 1.5;
+const COOLDOWN_FRAMES = 10;   // ~160ms between hits
+const SMOOTH          = 0.9;
+const NOISE_FLOOR     = 0.003;
 
-// Cooldown frames between hits per band (at ~60fps, 12 = 200ms)
-const COOLDOWN_FRAMES = 12;
+// ── Calibration capture state.
+let calLane      = null;
+let calCaptures  = [];
+let calOnCapture = null;
+let calOnDone    = null;
+const CAL_NEEDED = 4;         // hits captured & averaged per drum
 
-// Smooth factor for rolling average (0=instant, 0.99=very slow)
-const SMOOTH = 0.92;
+const STORAGE_KEY = 'zada_acoustic_cal_v1';
+const MIN_SIM     = 0.6;      // min cosine similarity to accept a match
 
-export async function startAcousticDetection(onHit) {
-  hitCallback = onHit;
+// ── Persistence ───────────────────────────────────────────────────────────────
+function loadProfiles() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const out = {};
+    for (const k of Object.keys(raw)) out[k] = Float32Array.from(raw[k]);
+    return out;
+  } catch { return {}; }
+}
+function saveProfiles() {
+  try {
+    const raw = {};
+    for (const k of Object.keys(profiles)) raw[k] = Array.from(profiles[k]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  } catch { /* storage full / disabled — session-only */ }
+}
 
+export function getCalibratedLanes()   { return Object.keys(profiles).map(Number); }
+export function isLaneCalibrated(lane) { return !!profiles[lane]; }
+export function clearLane(lane)        { delete profiles[lane]; saveProfiles(); }
+export function clearAllCalibration()  { profiles = {}; saveProfiles(); }
+
+// ── DSP helpers ───────────────────────────────────────────────────────────────
+let bandBins = null;
+function computeBandBins(sampleRate, binCount) {
+  const nyquist = sampleRate / 2;
+  const edges = [];
+  for (let i = 0; i <= N_BANDS; i++) {
+    const f = F_MIN * Math.pow(F_MAX / F_MIN, i / N_BANDS);
+    edges.push(Math.min(binCount - 1, Math.round((f / nyquist) * binCount)));
+  }
+  const bins = [];
+  for (let i = 0; i < N_BANDS; i++) bins.push([edges[i], Math.max(edges[i], edges[i + 1])]);
+  return bins;
+}
+
+function featureVector(freqData, sampleRate) {
+  if (!bandBins) bandBins = computeBandBins(sampleRate, freqData.length);
+  const v = new Float32Array(N_BANDS);
+  let norm = 0;
+  for (let i = 0; i < N_BANDS; i++) {
+    const [lo, hi] = bandBins[i];
+    let e = 0;
+    for (let b = lo; b <= hi; b++) { const x = freqData[b] / 255; e += x * x; }
+    v[i] = e / Math.max(1, hi - lo + 1);
+    norm += v[i] * v[i];
+  }
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < N_BANDS; i++) v[i] /= norm;
+  return v;
+}
+
+function totalEnergy(freqData) {
+  let e = 0;
+  for (let i = 0; i < freqData.length; i++) { const x = freqData[i] / 255; e += x * x; }
+  return e / freqData.length;
+}
+
+function cosine(a, b) {          // both unit-normalized → dot == cosine similarity
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+// ── Mic / graph setup ─────────────────────────────────────────────────────────
+async function ensureMic() {
+  if (stream && audioCtx) {
+    if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch (e) {} }
+    return;
+  }
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (e) {
     throw new Error('Microphone access denied. Please allow microphone access and try again.');
   }
-
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  analyser  = audioCtx.createAnalyser();
-  analyser.fftSize       = 2048;
-  analyser.smoothingTimeConstant = 0;   // we do our own smoothing
+  // Mobile browsers (esp. iOS Safari) start the context suspended; without this
+  // the analyser reads silence and no hits are ever detected.
+  if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch (e) {} }
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0;
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+  bandBins = null;
+}
 
-  const source = audioCtx.createMediaStreamSource(stream);
-  source.connect(analyser);
+function resetOnset() { avgEnergy = 0; lastEnergy = 0; cooldown = 0; }
+function ensureLoop() { if (!animId) loop(); }
 
+// ── Public API ────────────────────────────────────────────────────────────────
+export async function startAcousticDetection(onHit) {
+  hitCallback = onHit;
+  await ensureMic();
+  mode = 'play';
   active = true;
-  loop();
+  resetOnset();
+  ensureLoop();
   return true;
+}
+
+// Teach one lane: captures CAL_NEEDED hits, averages them into a fingerprint.
+// onCapture(count, needed) fires per hit; onDone(lane) when saved.
+export async function startCalibration(lane, onCapture, onDone) {
+  await ensureMic();
+  calLane      = lane;
+  calCaptures  = [];
+  calOnCapture = onCapture || null;
+  calOnDone    = onDone || null;
+  mode   = 'calibrate';
+  active = true;
+  resetOnset();
+  ensureLoop();
+}
+
+export function cancelCalibration() {
+  calLane = null; calCaptures = [];
+  if (mode === 'calibrate') mode = 'play';
 }
 
 export function stopAcousticDetection() {
   active = false;
+  mode = 'idle';
   cancelAnimationFrame(animId);
+  animId = null;
   if (stream)   { stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (audioCtx) { audioCtx.close(); audioCtx = null; }
   analyser = null;
-  bandState.forEach(s => { s.avgEnergy = 0; s.lastEnergy = 0; s.cooldown = 0; });
+  bandBins = null;
+  resetOnset();
 }
 
 export function setAcousticSensitivity(value) {
-  // value 1–10 slider: map to 2.5 (least sensitive) → 1.1 (most sensitive)
-  sensitivity = 2.5 - ((value - 1) / 9) * 1.4;
+  sensitivity = 2.5 - ((value - 1) / 9) * 1.4;   // slider 1..10 → 2.5..1.1
 }
+export function isAcousticActive() { return active; }
 
-export function isAcousticActive() {
-  return active;
-}
-
-function getBandEnergy(freqData, sampleRate, minHz, maxHz) {
-  const nyquist  = sampleRate / 2;
-  const binCount = freqData.length;
-  const minBin   = Math.floor((minHz / nyquist) * binCount);
-  const maxBin   = Math.min(Math.ceil((maxHz / nyquist) * binCount), binCount - 1);
-
-  let energy = 0;
-  for (let i = minBin; i <= maxBin; i++) {
-    const lin = freqData[i] / 255;  // 0–1
-    energy += lin * lin;
-  }
-  return energy / Math.max(1, maxBin - minBin + 1);
-}
-
+// ── Analysis loop ─────────────────────────────────────────────────────────────
 function loop() {
-  if (!active) return;
+  if (!active) { animId = null; return; }
   animId = requestAnimationFrame(loop);
 
-  const freqData   = new Uint8Array(analyser.frequencyBinCount);
+  const freqData = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(freqData);
-  const sampleRate = audioCtx.sampleRate;
 
-  BANDS.forEach((band, i) => {
-    const [minHz, maxHz, lane] = band;
-    const state = bandState[i];
+  const energy = totalEnergy(freqData);
+  avgEnergy = SMOOTH * avgEnergy + (1 - SMOOTH) * energy;
 
-    const energy = getBandEnergy(freqData, sampleRate, minHz, maxHz);
+  let onset = false;
+  if (cooldown > 0) {
+    cooldown--;
+  } else if (energy > avgEnergy * sensitivity && energy > lastEnergy && avgEnergy > NOISE_FLOOR) {
+    onset = true;
+    cooldown = COOLDOWN_FRAMES;
+  }
+  lastEnergy = energy;
+  if (!onset) return;
 
-    // Update rolling average
-    state.avgEnergy = SMOOTH * state.avgEnergy + (1 - SMOOTH) * energy;
+  const fp = featureVector(freqData, audioCtx.sampleRate);
 
-    if (state.cooldown > 0) {
-      state.cooldown--;
-    } else {
-      const threshold = state.avgEnergy * sensitivity;
-      // Onset: current energy spikes above threshold AND rose from last frame
-      if (energy > threshold && energy > state.lastEnergy && state.avgEnergy > 0.005) {
-        state.cooldown = COOLDOWN_FRAMES;
-        if (hitCallback) hitCallback(lane);
-      }
+  if (mode === 'calibrate') {
+    calCaptures.push(fp);
+    if (calOnCapture) calOnCapture(calCaptures.length, CAL_NEEDED);
+    if (calCaptures.length >= CAL_NEEDED) {
+      const avg = new Float32Array(N_BANDS);
+      for (const c of calCaptures) for (let i = 0; i < N_BANDS; i++) avg[i] += c[i];
+      let norm = 0;
+      for (let i = 0; i < N_BANDS; i++) norm += avg[i] * avg[i];
+      norm = Math.sqrt(norm) || 1;
+      for (let i = 0; i < N_BANDS; i++) avg[i] /= norm;
+
+      profiles[calLane] = avg;
+      saveProfiles();
+      const done = calLane;
+      calLane = null; calCaptures = [];
+      mode = 'play';
+      if (calOnDone) calOnDone(done);
     }
+    return;
+  }
 
-    state.lastEnergy = energy;
-  });
+  // Play: classify the onset to the nearest calibrated drum.
+  const lanes = Object.keys(profiles);
+  if (!lanes.length) return;
+  let bestLane = -1, bestSim = -1;
+  for (const k of lanes) {
+    const sim = cosine(fp, profiles[k]);
+    if (sim > bestSim) { bestSim = sim; bestLane = +k; }
+  }
+  if (bestLane >= 0 && bestSim >= MIN_SIM && hitCallback) hitCallback(bestLane);
 }
