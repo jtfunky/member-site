@@ -227,5 +227,5 @@ require __DIR__ . '/includes/header.php';
 <?php if (!empty($_GET['test'])): ?>
 <div id="drum-test-config" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260710"></script>
+<script type="module" src="/assets/js/game/main.js?v=20260711"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

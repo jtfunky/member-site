@@ -9,6 +9,7 @@ let canvas, ctx;
 let W, H, dpr;
 let laneW, hitZoneY, highwayTop;
 let NOTE_RADIUS = 16; // recalculated on resize
+let noteBarW = 60, noteBarH = 12; // rectangular note + target bars — recalculated on resize
 
 // Active visual effects
 const flashEffects = []; // { lane, alpha, startTime }
@@ -35,6 +36,8 @@ export function resize() {
   hitZoneY    = H * HIT_ZONE_PCT;
   highwayTop  = 56;
   NOTE_RADIUS = Math.max(10, Math.min(18, Math.floor(laneW * 0.32)));
+  noteBarW    = laneW * 0.66;
+  noteBarH    = Math.max(8, Math.min(15, Math.round(laneW * 0.16)));
 }
 
 export function addFlash(lane) {
@@ -138,11 +141,11 @@ function drawHitZone() {
   ctx.fillRect(0, hitZoneY - 1, W, 2);
   ctx.shadowBlur = 0;
 
-  // Lane circles at hit zone
+  // Lane target bars at the hit zone
+  const r = Math.min(5, noteBarH / 2);
   for (let i = 0; i < LANE_COUNT; i++) {
     const cx = i * laneW + laneW / 2;
-    ctx.beginPath();
-    ctx.arc(cx, hitZoneY, NOTE_RADIUS + 4, 0, Math.PI * 2);
+    roundRectPath(cx - noteBarW / 2, hitZoneY - noteBarH / 2, noteBarW, noteBarH, r);
     ctx.strokeStyle = LANE_COLORS[i] + '88';
     ctx.lineWidth   = 2;
     ctx.stroke();
@@ -161,28 +164,26 @@ function drawNotes(activeNotes, songPosition, scrollTimeWindow) {
     const screenY = hitZoneY - frac * highwayH;
 
     // Only draw if on screen
-    if (screenY < highwayTop - NOTE_RADIUS || screenY > hitZoneY + NOTE_RADIUS * 2) continue;
+    if (screenY < highwayTop - noteBarH || screenY > hitZoneY + noteBarH * 2) continue;
 
     const cx    = note.lane * laneW + laneW / 2;
     const color = LANE_COLORS[note.lane];
+    const x = cx - noteBarW / 2;
+    const y = screenY - noteBarH / 2;
+    const r = Math.min(5, noteBarH / 2);
 
-    // Note glow
+    // Filled bar with glow
     ctx.shadowColor = color;
-    ctx.shadowBlur  = 16;
-
-    // Filled circle
-    ctx.beginPath();
-    ctx.arc(cx, screenY, NOTE_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = color;
+    roundRectPath(x, y, noteBarW, noteBarH, r);
     ctx.fill();
-
-    // White center highlight
-    ctx.beginPath();
-    ctx.arc(cx - NOTE_RADIUS * 0.25, screenY - NOTE_RADIUS * 0.25, NOTE_RADIUS * 0.35, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fill();
-
     ctx.shadowBlur = 0;
+
+    // Thin top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    roundRectPath(x + 2, y + 1.5, noteBarW - 4, Math.max(2, noteBarH * 0.28), Math.min(2, r));
+    ctx.fill();
   }
 }
 
@@ -278,6 +279,18 @@ export function drawResults(scoreState, song) {
   ctx.font      = '14px monospace';
   ctx.fillStyle = '#6b7280';
   ctx.fillText('Press R to play again  ·  ESC to menu', cx, cy + 200);
+}
+
+// Build a rounded-rectangle path (native roundRect where available, else manual).
+function roundRectPath(x, y, w, h, r) {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') { ctx.roundRect(x, y, w, h, r); return; }
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function hexToRgba(hex, alpha) {

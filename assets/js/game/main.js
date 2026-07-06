@@ -1,7 +1,7 @@
 import { initMidi, selectInput, getInputList, onDeviceChange } from './midi.js';
 import { onMidiMessage, flushHits, setChannelFilter, getDefaultMap, getLaneNames } from './input.js';
 import { loadSong, updateChart, getActiveNotes, findClosestNote, expireMissed, reset as resetChart } from './chart.js?v=20260702';
-import { initRenderer, drawFrame, addFlash, addJudgment } from './renderer.js';
+import { initRenderer, drawFrame, addFlash, addJudgment } from './renderer.js?v=20260711';
 import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING } from './scoring.js?v=20260702';
 import { playHitClick, playCountdownBeep, resumeContext } from './audio.js';
 import { loadAudioUrl, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js';
