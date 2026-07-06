@@ -46,7 +46,7 @@ require __DIR__ . '/../includes/header.php';
     <thead>
       <tr>
         <th>Student</th><th>Grade</th><th>Accuracy</th>
-        <th>P / G / M</th><th>Combo</th><th>Timing</th><th>Date</th><th>Coaching</th>
+        <th>P / G / M</th><th>Combo</th><th>Timing</th><th>Date</th><th>Coaching</th><th>Plan</th>
       </tr>
     </thead>
     <tbody>
@@ -73,6 +73,7 @@ require __DIR__ . '/../includes/header.php';
             <small>—</small>
           <?php endif; ?>
         </td>
+        <td><a href="/admin/plan-edit.php?user=<?= (int) $t['user_id'] ?>" class="btn btn-ghost btn-xs">Edit Plan</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

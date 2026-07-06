@@ -66,6 +66,40 @@ function generatePracticePlan(int $userId): array|string {
     return getPracticePlan($userId) ?? 'Plan saved but could not be loaded.';
 }
 
+// Coach edit: update the plan's intro + each session's title/focus/drills by
+// session_no, WITHOUT touching the student's completed progress. Returns true on
+// success. $sessions is keyed by session_no => ['title','focus','drills'=>[]].
+function updatePlanContent(int $userId, string $intro, array $sessions): bool {
+    $db = db();
+    try {
+        $p = $db->prepare('SELECT id FROM practice_plans WHERE user_id = ? LIMIT 1');
+        $p->execute([$userId]);
+        $planId = (int) ($p->fetchColumn() ?: 0);
+        if (!$planId) return false;
+
+        $db->beginTransaction();
+        $db->prepare('UPDATE practice_plans SET intro = ? WHERE id = ?')
+           ->execute([mb_substr($intro, 0, 1000), $planId]);
+
+        $upd = $db->prepare('UPDATE plan_sessions SET title = ?, focus = ?, drills = ? WHERE plan_id = ? AND session_no = ?');
+        foreach ($sessions as $no => $s) {
+            $drills = array_filter(array_map('trim', (array) ($s['drills'] ?? [])), fn($x) => $x !== '');
+            $drills = array_slice(array_map(fn($x) => mb_substr($x, 0, 300), array_values($drills)), 0, 6);
+            $upd->execute([
+                mb_substr((string) ($s['title'] ?? ''), 0, 200),
+                mb_substr((string) ($s['focus'] ?? ''), 0, 255),
+                json_encode($drills),
+                $planId, (int) $no,
+            ]);
+        }
+        $db->commit();
+        return true;
+    } catch (\Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return false;
+    }
+}
+
 // Toggle a session's completed flag (ownership-checked). Returns true on success.
 function togglePlanSession(int $userId, int $sessionNo, bool $done): bool {
     try {
