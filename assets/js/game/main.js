@@ -1,23 +1,28 @@
 import { initMidi, selectInput, getInputList, onDeviceChange } from './midi.js';
 import { onMidiMessage, flushHits, setChannelFilter, getDefaultMap, getLaneNames } from './input.js';
 import { loadSong, updateChart, getActiveNotes, findClosestNote, expireMissed, reset as resetChart } from './chart.js?v=20260702';
-import { initRenderer, drawFrame, addFlash, addJudgment } from './renderer.js?v=20260711';
+import { initRenderer, drawFrame, addFlash, addJudgment, drawCountdown } from './renderer.js?v=20260711';
 import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING } from './scoring.js?v=20260702';
-import { playHitClick, playCountdownBeep, resumeContext } from './audio.js';
+import { playHitClick, playCountdownBeep, resumeContext, playMetronomeClick } from './audio.js?v=20260712';
 import { loadAudioUrl, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js';
 import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive,
          startCalibration, cancelCalibration, isLaneCalibrated, clearLane, startPadDetection } from './acoustic.js?v=20260709';
 import { song as demoSong } from './songs/demo.js?v=20260705';
 import { song as rockSong } from './songs/rock-basics.js?v=20260705';
+import { song as placementSong } from './songs/placement.js?v=20260715';
 
-demoSong.id           = 'demo';
-demoSong.artist       = 'MS Drums';
-demoSong.builtin      = true;
-demoSong.placementTest = true;   // the standardized exercise used by the placement test
+demoSong.id      = 'demo';
+demoSong.artist  = 'MS Drums';
+demoSong.builtin = true;
 
 rockSong.id      = 'rock-basics';
 rockSong.artist  = 'MS Drums';
 rockSong.builtin = true;
+
+placementSong.id            = 'placement';
+placementSong.artist        = 'MS Drums';
+placementSong.builtin       = true;
+placementSong.placementTest = true;   // the standardized exercise used by the placement test
 
 // ── State ─────────────────────────────────────────────────
 const STATES = { IDLE: 0, COUNTDOWN: 2, PLAYING: 3, PAUSED: 4, RESULTS: 5 };
@@ -32,6 +37,13 @@ let rafId            = null;
 let currentSong      = demoSong;
 let songDuration     = 0;   // effective length (ms) for this playthrough
 let pausedPosition   = 0;
+let lastMetroBeat    = -Infinity; // last metronome beat clicked (incl. the lead-in)
+let audioStarted     = false;     // audio starts when the lead-in reaches song pos 0
+
+// Every song gets a 2-bar lead-in: the clock starts this far "in the past" so notes
+// scroll in from the top instead of appearing on the hit line, and the metronome
+// pulses so the player can feel the tempo before the first block.
+const LEAD_IN_BARS = 2;
 let allSongs         = [];
 let inputMode        = ''; // 'midi' | 'acoustic' — chosen from the menu before playing
 
@@ -88,7 +100,7 @@ async function loadSongLibrary() {
     if (res.ok) custom = await res.json();
   } catch (e) { /* network error, just show demo */ }
 
-  allSongs = [{ ...demoSong, builtin: true }, { ...rockSong, builtin: true }, ...custom];
+  allSongs = [{ ...demoSong, builtin: true }, { ...rockSong, builtin: true }, { ...placementSong, builtin: true }, ...custom];
   await loadProgress();
 }
 
@@ -128,8 +140,9 @@ function renderSongList() {
   const list = document.getElementById('song-list');
   list.innerHTML = '';
 
-  // Placement test uses a single standardized exercise so results are comparable.
-  const songs = DRUM_TEST_MODE ? allSongs.filter(s => s.placementTest) : allSongs;
+  // Placement test uses a single standardized exercise so results are comparable;
+  // that exercise is hidden from the normal song library.
+  const songs = DRUM_TEST_MODE ? allSongs.filter(s => s.placementTest) : allSongs.filter(s => !s.placementTest);
   if (DRUM_TEST_MODE) {
     const heading = document.querySelector('#song-library h2');
     if (heading) heading.textContent = 'Placement Test — play this exercise';
@@ -197,22 +210,31 @@ async function selectSong(song) {
 
 // ── Countdown ─────────────────────────────────────────────
 function startCountdown() {
-  showScreen('countdown');
-  let n = 3;
-  const numEl = document.getElementById('countdown-number');
-  numEl.textContent = n;
-  playCountdownBeep(false);
+  // Show the play area (the highway) and draw the count-in OVER it — no separate
+  // black screen. A continuous rAF loop keeps the highway painted every frame, so
+  // the fullscreen resize can't leave a black gap between beats.
+  showScreen('game');
+  document.getElementById('hud-title').textContent = currentSong.title;
+  state = STATES.COUNTDOWN;
 
-  countdownTimer = setInterval(() => {
-    n--;
-    if (n <= 0) {
-      clearInterval(countdownTimer);
-      startGame();
-    } else {
-      numEl.textContent = n;
-      playCountdownBeep(n === 1);
+  const beatMs = 60000 / (currentSong.bpm || 120);
+  const startT = performance.now();
+  let lastClickBeat = -1;
+
+  cancelAnimationFrame(rafId);
+  const loop = (now) => {
+    if (state !== STATES.COUNTDOWN) return;       // quit/aborted
+    const beat = Math.floor((now - startT) / beatMs); // 0..3 through the bar
+    if (beat >= 4) { startGame(); return; }        // count-in done → notes fall
+
+    drawCountdown(4 - beat);                        // count DOWN: 4, 3, 2, 1
+    if (beat > lastClickBeat) {                     // one metronome click per beat
+      lastClickBeat = beat;
+      playMetronomeClick(beat === 0);               // accent the first beat
     }
-  }, 1000);
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
 }
 
 // ── Game ──────────────────────────────────────────────────
@@ -236,11 +258,22 @@ function startGame() {
 
   loadSong(currentSong);
   scoreState    = createScoreState(currentSong.notes.length);
-  songStartTime = performance.now();
   songDuration  = resolveSongDuration();
-  state         = STATES.PLAYING;
 
-  if (hasAudio()) playAudio(0);   // start from the beginning of the track (offset is ms-into-song, not a timestamp)
+  // Begin ~2 bars BEFORE the first note so blocks scroll in (not snap onto the
+  // line). For songs with audio, start the track at that same point so the music
+  // comes in with the blocks — no intro playing over an empty highway.
+  const leadMs   = (60000 / (currentSong.bpm || 120)) * 4 * LEAD_IN_BARS;
+  const firstNote = currentSong.notes.reduce((m, n) => Math.min(m, n.time), Infinity);
+  const startPos  = (Number.isFinite(firstNote) ? firstNote : 0) - leadMs;
+  songStartTime = performance.now() - startPos;   // song position begins at startPos
+  state         = STATES.PLAYING;
+  lastMetroBeat = -Infinity;
+  audioStarted  = false;
+
+  // If the lead-in point is already inside the track, start the audio there now;
+  // otherwise gameLoop starts it when the clock reaches position 0.
+  if (hasAudio() && startPos >= 0) { playAudio(startPos); audioStarted = true; }
 
   cancelAnimationFrame(rafId);
   rafId = requestAnimationFrame(gameLoop);
@@ -250,7 +283,27 @@ function gameLoop(now) {
   if (state !== STATES.PLAYING) return;
 
   const songPos = now - songStartTime;
+
+  // Kick off the audio once the lead-in reaches song position 0.
+  if (!audioStarted && songPos >= 0) {
+    if (hasAudio()) playAudio(0);
+    audioStarted = true;
+  }
+
   updateChart(songPos, scrollTimeWindow);
+
+  // Metronome: during the lead-in (song pos < 0) for every song, and through the
+  // whole song for metronome-flagged exercises (e.g. the placement test).
+  if (songPos < songDuration) {
+    const beatMs = 60000 / (currentSong.bpm || 120);
+    const beat   = Math.floor(songPos / beatMs);
+    if (beat > lastMetroBeat) {
+      lastMetroBeat = beat;
+      // Click through the lead-in + the downbeat (beat 0) for every song; keep
+      // clicking through the whole song only for metronome-flagged exercises.
+      if (beat <= 0 || currentSong.metronome) playMetronomeClick(beat % 4 === 0);
+    }
+  }
 
   const missedLanes = expireMissed(songPos, TIMING.MISS_EXPIRE);
   missedLanes.forEach(lane => {
@@ -455,7 +508,7 @@ function resumeGame() {
   showScreen('game');
   songStartTime = performance.now() - pausedPosition;
   state = STATES.PLAYING;
-  resumeAudio();   // resumes from the paused position it stored internally
+  if (audioStarted) resumeAudio();   // if paused during the lead-in, gameLoop starts it at pos 0
   rafId = requestAnimationFrame(gameLoop);
 }
 

@@ -107,8 +107,8 @@ require __DIR__ . '/includes/header.php';
       </button>
       <button class="input-opt" data-input="pad">
         <span class="input-icon">🪘</span>
-        <span>Single Drum Pad</span>
-        <small>One pad, via microphone</small>
+        <span>Practice Pad</span>
+        <small>Single pad · via microphone</small>
       </button>
     </div>
     <div id="acoustic-status" class="acoustic-status" style="display:none"></div>
@@ -227,5 +227,5 @@ require __DIR__ . '/includes/header.php';
 <?php if (!empty($_GET['test'])): ?>
 <div id="drum-test-config" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260711"></script>
+<script type="module" src="/assets/js/game/main.js?v=20260716"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

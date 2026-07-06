@@ -41,6 +41,23 @@ export function playCountdownBeep(high = false) {
   } catch (_) {}
 }
 
+// Short metronome tick; `accent` = the downbeat (beat 1), a bit higher/louder.
+export function playMetronomeClick(accent = false) {
+  try {
+    const ac  = getCtx();
+    const osc = ac.createOscillator();
+    const env = ac.createGain();
+    osc.type = 'square';
+    osc.frequency.value = accent ? 1600 : 1100;
+    env.gain.setValueAtTime(accent ? 0.22 : 0.15, ac.currentTime);
+    env.gain.exponentialRampToValueAtTime(0.0005, ac.currentTime + 0.03);
+    osc.connect(env);
+    env.connect(ac.destination);
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + 0.03);
+  } catch (_) {}
+}
+
 export function resumeContext() {
   if (ctx && ctx.state === 'suspended') ctx.resume();
 }
