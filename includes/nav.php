@@ -1,7 +1,14 @@
 <?php
 // Shared top navigation — include after $user is set
 require_once __DIR__ . '/programs.php';
+require_once __DIR__ . '/access.php';
 $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
+// The placement test is a one-time assessment — hide it once taken (admins keep
+// it); the "My Plan" link takes its place once the student has a result.
+$navTakenPlacement = hasTakenPlacementTest((int) ($user['id'] ?? 0));
+$navShowPlacement  = (($user['role'] ?? '') === 'admin') || !$navTakenPlacement;
+$navShowPlan       = $navTakenPlacement;
 
 // Web-access-only students have no session credits, so hide "My Sessions".
 $navStudent = null;
@@ -37,7 +44,12 @@ $navRemindProof = $navStudent
     <li><a href="/my-membership.php" class="<?= $currentPath === '/my-membership.php' ? 'active' : '' ?>">My Enrollment</a></li>
     <?php endif; ?>
     <li><a href="/game.php"      class="<?= $currentPath === '/game.php'    ? 'active' : '' ?>">Game</a></li>
+    <?php if ($navShowPlacement): ?>
     <li><a href="/placement-test.php" class="<?= $currentPath === '/placement-test.php' ? 'active' : '' ?>">Placement Test</a></li>
+    <?php endif; ?>
+    <?php if ($navShowPlan): ?>
+    <li><a href="/my-plan.php" class="<?= $currentPath === '/my-plan.php' ? 'active' : '' ?>">My Plan</a></li>
+    <?php endif; ?>
     <?php if ($navShowSessions): ?>
     <li><a href="/my-sessions.php" class="<?= $currentPath === '/my-sessions.php' ? 'active' : '' ?>">My Sessions</a></li>
     <?php endif; ?>

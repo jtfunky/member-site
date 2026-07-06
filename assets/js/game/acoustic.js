@@ -142,6 +142,18 @@ export async function startAcousticDetection(onHit) {
   return true;
 }
 
+// Single practice pad: onHit() fires (no lane) on every detected hit. The game
+// maps it to the nearest note in any lane. No calibration needed.
+export async function startPadDetection(onHit) {
+  hitCallback = onHit;
+  await ensureMic();
+  mode = 'pad';
+  active = true;
+  resetOnset();
+  ensureLoop();
+  return true;
+}
+
 // Teach one lane: captures CAL_NEEDED hits, averages them into a fingerprint.
 // onCapture(count, needed) fires per hit; onDone(lane) when saved.
 export async function startCalibration(lane, onCapture, onDone) {
@@ -198,6 +210,10 @@ function loop() {
   }
   lastEnergy = energy;
   if (!onset) return;
+
+  // Single-pad mode: any onset is a hit (the game maps it to the nearest note in
+  // any lane). No drum classification / fingerprint needed.
+  if (mode === 'pad') { if (hitCallback) hitCallback(); return; }
 
   const fp = featureVector(freqData, audioCtx.sampleRate);
 

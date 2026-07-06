@@ -78,6 +78,53 @@ CREATE TABLE IF NOT EXISTS songs (
 ");
 
 $pdo->exec("
+CREATE TABLE IF NOT EXISTS song_plays (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT          NOT NULL,
+  song_id      VARCHAR(64)  NOT NULL,
+  song_title   VARCHAR(200) NOT NULL DEFAULT '',
+  score        INT          NOT NULL DEFAULT 0,
+  accuracy     DECIMAL(5,2) NOT NULL DEFAULT 0,
+  grade        VARCHAR(2)   NOT NULL DEFAULT '',
+  max_combo    INT          NOT NULL DEFAULT 0,
+  perfect      INT          NOT NULL DEFAULT 0,
+  good         INT          NOT NULL DEFAULT 0,
+  miss         INT          NOT NULL DEFAULT 0,
+  total_notes  INT          NOT NULL DEFAULT 0,
+  input_method VARCHAR(20)  NOT NULL DEFAULT '',
+  played_at    DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_song   (user_id, song_id),
+  INDEX idx_user_played (user_id, played_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS practice_plans (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT NOT NULL,
+  drum_test_id INT NULL,
+  intro        TEXT,
+  generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS plan_sessions (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  plan_id      INT          NOT NULL,
+  session_no   INT          NOT NULL,
+  title        VARCHAR(200) NOT NULL DEFAULT '',
+  focus        VARCHAR(255) NOT NULL DEFAULT '',
+  drills       TEXT,
+  completed    TINYINT(1)   NOT NULL DEFAULT 0,
+  completed_at DATETIME     NULL,
+  UNIQUE KEY uniq_plan_session (plan_id, session_no),
+  INDEX idx_plan (plan_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
 CREATE TABLE IF NOT EXISTS login_attempts (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   ip           VARCHAR(45)  NOT NULL,

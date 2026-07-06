@@ -6,7 +6,7 @@ import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING 
 import { playHitClick, playCountdownBeep, resumeContext } from './audio.js';
 import { loadAudioUrl, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js';
 import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive,
-         startCalibration, cancelCalibration, isLaneCalibrated, clearLane } from './acoustic.js?v=20260707';
+         startCalibration, cancelCalibration, isLaneCalibrated, clearLane, startPadDetection } from './acoustic.js?v=20260709';
 import { song as demoSong } from './songs/demo.js?v=20260705';
 import { song as rockSong } from './songs/rock-basics.js?v=20260705';
 
@@ -26,6 +26,7 @@ let songStartTime    = 0;
 let scrollTimeWindow = 2000;
 let hitSoundEnabled  = true;
 let scoreState       = null;
+let myBests          = {};   // { song_id: {score, grade, accuracy} } — member's per-song best
 let countdownTimer   = null;
 let rafId            = null;
 let currentSong      = demoSong;
@@ -37,8 +38,10 @@ let inputMode        = ''; // 'midi' | 'acoustic' — chosen from the menu befor
 // Placement-test config comes from a data element in game.php (the site CSP
 // blocks inline scripts, so we can't set window globals there).
 const _testCfg      = document.getElementById('drum-test-config');
+const _gameCfg      = document.getElementById('game-config');
 const DRUM_TEST_MODE = !!_testCfg;
-const CSRF_TOKEN     = _testCfg ? (_testCfg.dataset.csrf || '') : '';
+// CSRF is on #game-config (present on every game load); test config kept as marker.
+const CSRF_TOKEN     = _gameCfg ? (_gameCfg.dataset.csrf || '') : (_testCfg ? (_testCfg.dataset.csrf || '') : '');
 
 const canvas = document.getElementById('game-canvas');
 initRenderer(canvas);
@@ -46,8 +49,13 @@ initRenderer(canvas);
 // ── Fullscreen helpers ────────────────────────────────────
 function enterFullscreen() {
   const el = document.documentElement;
-  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  let p;
+  if (el.requestFullscreen)            p = el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) p = el.webkitRequestFullscreen();
+  // Force landscape once fullscreen is actually active. The Screen Orientation
+  // lock overrides the device's own rotation lock (auto-rotate off) on browsers
+  // that support it (Android Chrome/Edge). iOS ignores it → the rotate overlay.
+  Promise.resolve(p).then(lockLandscape).catch(() => {});
 }
 
 function exitFullscreenApi() {
@@ -81,7 +89,39 @@ async function loadSongLibrary() {
   } catch (e) { /* network error, just show demo */ }
 
   allSongs = [{ ...demoSong, builtin: true }, { ...rockSong, builtin: true }, ...custom];
+  await loadProgress();
+}
+
+// Fetch best-per-song + recent plays and re-render the library. Called on boot
+// and after each play so scores stay current without a page reload. Skipped for
+// the placement test; non-fatal if the table isn't migrated yet.
+async function loadProgress() {
+  if (!DRUM_TEST_MODE) {
+    try {
+      const res = await fetch('/api/my-plays.php');
+      if (res.ok) {
+        const data = await res.json();
+        myBests = data.bests || {};
+        renderRecentPlays(data.recent || []);
+      }
+    } catch (e) { /* non-fatal */ }
+  }
   renderSongList();
+}
+
+function renderRecentPlays(recent) {
+  const wrap = document.getElementById('recent-plays');
+  if (!wrap) return;
+  if (!recent.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = '';
+  const rows = recent.map(r => `
+    <div class="recent-row">
+      <span class="recent-song">${escHtml(r.song_title || '—')}</span>
+      <span class="recent-grade">${escHtml(r.grade || '')}</span>
+      <span class="recent-score">${Number(r.score || 0).toLocaleString()}</span>
+      <span class="recent-acc">${Number(r.accuracy || 0).toFixed(1)}%</span>
+    </div>`).join('');
+  wrap.innerHTML = `<h2>Recent Plays</h2><div class="recent-list">${rows}</div>`;
 }
 
 function renderSongList() {
@@ -96,6 +136,10 @@ function renderSongList() {
   }
 
   songs.forEach(song => {
+    const best = myBests[String(song.id)];
+    const bestHtml = best
+      ? `<span class="song-best">🏆 Best: ${Number(best.score).toLocaleString()}${best.grade ? ' · ' + escHtml(best.grade) : ''}</span>`
+      : '';
     const item = document.createElement('div');
     item.className = 'song-item';
     item.innerHTML = `
@@ -103,6 +147,7 @@ function renderSongList() {
         <strong>${escHtml(song.title)}</strong>
         <span>${escHtml(song.artist || 'Unknown')}</span>
         <span class="song-meta">${song.bpm} BPM · ${song.notes?.length || 0} notes</span>
+        ${bestHtml}
       </div>
       <button class="btn btn-primary btn-sm song-play-btn">Play</button>
     `;
@@ -248,6 +293,31 @@ function processHit(lane, now) {
   }
 }
 
+// Single-pad input: one hit is judged against the nearest unhit note in ANY lane
+// (timing practice — the student plays the rhythm on one pad).
+function processPadHit(now) {
+  const songPos = now - songStartTime;
+  const activeNotes = getActiveNotes();
+  let best = -1, bestDt = Infinity;
+  for (let i = 0; i < activeNotes.length; i++) {
+    const n = activeNotes[i];
+    if (n.hit || n.missed) continue;
+    const dt = Math.abs(songPos - n.time);
+    if (dt < bestDt && dt <= TIMING.MISS_EXPIRE) { bestDt = dt; best = i; }
+  }
+  if (best === -1) return;
+
+  const n      = activeNotes[best];
+  const signed = songPos - n.time;
+  const judgment = judgeHit(scoreState, Math.abs(signed), signed, n.lane);
+  if (judgment) {
+    n.hit = true;
+    addFlash(n.lane);
+    addJudgment(judgment, n.lane);
+    if (hitSoundEnabled) playHitClick();
+  }
+}
+
 function endGame() {
   state = STATES.RESULTS;
   cancelAnimationFrame(rafId);
@@ -268,7 +338,35 @@ function endGame() {
   document.getElementById('r-combo').textContent        = scoreState.maxCombo;
 
   // Placement-test mode: save this play and fetch AI coaching for it.
+  // Normal play: record the score so it shows up in the member's progress.
   if (DRUM_TEST_MODE) submitPlacementTest(acc, grade);
+  else savePlay(acc, grade);
+}
+
+// Record a completed (non-test) play. Fire-and-forget — never blocks the results.
+async function savePlay(acc, grade) {
+  const c = scoreState.counts;
+  const payload = {
+    song_id:      String(currentSong.id ?? ''),
+    song_title:   currentSong.title,
+    score:        scoreState.score,
+    accuracy:     Math.round(acc * 10) / 10,
+    grade,
+    max_combo:    scoreState.maxCombo,
+    perfect:      c.PERFECT,
+    good:         c.GOOD,
+    miss:         c.MISS,
+    total_notes:  scoreState.totalNotes,
+    input_method: inputMode,
+  };
+  try {
+    await fetch('/api/save-play.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      body: JSON.stringify(payload),
+    });
+    loadProgress();   // refresh best-per-song + recent list from the server
+  } catch (e) { /* offline / network — non-fatal */ }
 }
 
 // ── Placement test: submit metrics + render AI coaching ───
@@ -422,7 +520,7 @@ function syncInputGate() {
   const cal = document.getElementById('acoustic-calibration');
 
   let armed = false, hint = '🔒 Choose your input above to unlock the song library.';
-  if (inputMode === 'midi') {
+  if (inputMode === 'midi' || inputMode === 'pad') {
     armed = true;
   } else if (inputMode === 'acoustic') {
     armed = requiredCalibrated();
@@ -484,7 +582,7 @@ function beginCalibrate(lane, row) {
 
 async function switchInputMode(mode) {
   // Stop previous acoustic if active
-  if (inputMode === 'acoustic' && mode !== 'acoustic') {
+  if ((inputMode === 'acoustic' || inputMode === 'pad') && mode !== inputMode) {
     stopAcousticDetection();
     if (acousticStatus) { acousticStatus.style.display = 'none'; }
     if (acousticSensGroup) acousticSensGroup.style.display = 'none';
@@ -519,6 +617,28 @@ async function switchInputMode(mode) {
       }
       inputMode = ''; // acoustic failed — no input armed until the user picks again
     }
+  } else if (mode === 'pad') {
+    if (acousticSensGroup) acousticSensGroup.style.display = '';
+    if (acousticStatus) {
+      acousticStatus.style.display = '';
+      acousticStatus.textContent = '🎙️ Requesting microphone access…';
+      acousticStatus.className = 'acoustic-status acoustic-pending';
+    }
+    try {
+      await startPadDetection(() => {
+        if (state === STATES.PLAYING) processPadHit(performance.now());
+      });
+      if (acousticStatus) {
+        acousticStatus.textContent = '🎙️ Microphone active — hit your pad to play. No calibration needed.';
+        acousticStatus.className = 'acoustic-status acoustic-active';
+      }
+    } catch (err) {
+      if (acousticStatus) {
+        acousticStatus.textContent = '❌ ' + err.message;
+        acousticStatus.className = 'acoustic-status acoustic-error';
+      }
+      inputMode = ''; // mic failed — no input armed
+    }
   } else {
     if (acousticStatus) acousticStatus.style.display = 'none';
     if (acousticSensGroup) acousticSensGroup.style.display = 'none';
@@ -530,6 +650,9 @@ async function switchInputMode(mode) {
 
 document.querySelectorAll('.input-opt').forEach(btn => {
   btn.addEventListener('click', () => {
+    // On touch devices, go fullscreen on the first input tap so the browser
+    // address bar is hidden for the whole menu → calibration → game flow.
+    if (window.matchMedia('(hover: none)').matches) enterFullscreen();
     document.querySelectorAll('.input-opt').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     switchInputMode(btn.dataset.input);

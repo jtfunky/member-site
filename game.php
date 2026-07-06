@@ -3,6 +3,11 @@ require_once __DIR__ . '/includes/bootstrap.php';
 
 $user = requireLogin();
 requireProfileComplete($user); // self-signups must finish their profile first
+// The placement test is a one-time assessment — block re-entering test mode once taken.
+if (!empty($_GET['test']) && ($user['role'] ?? '') !== 'admin' && hasTakenPlacementTest((int) $user['id'])) {
+    header('Location: ' . SITE_URL . '/dashboard.php');
+    exit;
+}
 requirePlacementTest($user);   // new signups take the placement test first (self-allows ?test=1)
 // The placement test (?test=1) is open to any enrolled student regardless of
 // membership status — it uses only the free built-in exercise. The full game
@@ -12,6 +17,12 @@ if (empty($_GET['test'])) requirePremium($user);
 $pageTitle = 'Drum Game — ' . SITE_NAME;
 $pageCss   = ['game'];
 $bodyClass = 'game-body';
+// Web-app meta so "Add to Home Screen" launches the game full-screen (no browser
+// chrome) on iOS + Android. In-browser, tapping an input requests fullscreen.
+$pageHead  = '<meta name="mobile-web-app-capable" content="yes">'
+           . '<meta name="apple-mobile-web-app-capable" content="yes">'
+           . '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+           . '<meta name="apple-mobile-web-app-title" content="' . htmlspecialchars(SITE_NAME) . '">';
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -50,6 +61,17 @@ require __DIR__ . '/includes/header.php';
   }
   .cal-btn:hover { background: #4338ca; }
   .cal-btn.cal-btn-clear { background: transparent; border: 1px solid rgba(255,255,255,.2); color: var(--text-dim, #9ca3af); }
+
+  /* Per-song best + recent plays */
+  .song-best { display: block; font-size: .8rem; color: #fcd34d; margin-top: .15rem; }
+  .recent-plays { padding: 0 2rem 2rem; }
+  .recent-plays h2 { margin: 1rem 0 .5rem; }
+  .recent-list { display: flex; flex-direction: column; gap: .35rem; }
+  .recent-row { display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 6px; font-size: .85rem; }
+  .recent-song  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-grade { font-weight: 700; color: #facc15; min-width: 1.2rem; text-align: center; }
+  .recent-score { min-width: 4.5rem; text-align: right; }
+  .recent-acc   { color: var(--dim); min-width: 3.5rem; text-align: right; }
 </style>
 
 <!-- ── Rotate overlay (portrait mobile/tablet) ──────────── -->
@@ -83,6 +105,11 @@ require __DIR__ . '/includes/header.php';
         <span>Acoustic Drums</span>
         <small>Via microphone</small>
       </button>
+      <button class="input-opt" data-input="pad">
+        <span class="input-icon">🪘</span>
+        <span>Single Drum Pad</span>
+        <small>One pad, via microphone</small>
+      </button>
     </div>
     <div id="acoustic-status" class="acoustic-status" style="display:none"></div>
 
@@ -102,6 +129,8 @@ require __DIR__ . '/includes/header.php';
       <div class="loading">Loading songs…</div>
     </div>
   </div>
+
+  <div id="recent-plays" class="recent-plays" style="display:none"></div>
 </div>
 
 <div id="screen-settings" class="screen">
@@ -194,8 +223,9 @@ require __DIR__ . '/includes/header.php';
 
 <button id="btn-settings" class="fab-settings" title="Settings">⚙️</button>
 
+<div id="game-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" hidden></div>
 <?php if (!empty($_GET['test'])): ?>
-<div id="drum-test-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" hidden></div>
+<div id="drum-test-config" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260707"></script>
+<script type="module" src="/assets/js/game/main.js?v=20260710"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

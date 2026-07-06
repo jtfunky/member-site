@@ -4,6 +4,13 @@ require_once __DIR__ . '/includes/ai_feedback.php';
 
 $user = requireLogin();
 
+// One-time assessment: once taken, the placement test is locked and off the menu.
+// (Admins keep access.) The result is recorded and drives the student's plan.
+if (($user['role'] ?? '') !== 'admin' && hasTakenPlacementTest((int) $user['id'])) {
+    header('Location: ' . SITE_URL . '/dashboard.php');
+    exit;
+}
+
 // Recent placement tests for this student.
 $tests = [];
 try {

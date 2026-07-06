@@ -69,13 +69,7 @@ function requirePlacementTest(array $user): void {
     if (!$row || (int) ($row['placement_required'] ?? 0) !== 1) return; // exempt / existing member
 
     // Already taken? (a saved drum test satisfies the requirement)
-    try {
-        $t = db()->prepare('SELECT 1 FROM drum_tests WHERE user_id = ? LIMIT 1');
-        $t->execute([(int) $user['id']]);
-        if ($t->fetchColumn()) return;
-    } catch (\Throwable $e) {
-        return; // drum_tests table missing → don't block
-    }
+    if (hasTakenPlacementTest((int) $user['id'])) return;
 
     // Allow the placement pages themselves (the intro + the test play).
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
@@ -83,6 +77,18 @@ function requirePlacementTest(array $user): void {
 
     header('Location: ' . SITE_URL . '/placement-test.php');
     exit;
+}
+
+// True once the user has completed the placement test (has a drum_tests row).
+// Used to lock the test after it's taken — it's a one-time assessment.
+function hasTakenPlacementTest(int $userId): bool {
+    try {
+        $t = db()->prepare('SELECT 1 FROM drum_tests WHERE user_id = ? LIMIT 1');
+        $t->execute([$userId]);
+        return (bool) $t->fetchColumn();
+    } catch (\Throwable $e) {
+        return false; // drum_tests table missing → treat as not taken
+    }
 }
 
 function extendAccess(int $userId, int $days): void {

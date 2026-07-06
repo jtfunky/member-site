@@ -75,7 +75,7 @@ body.game-body {
 /* Input select */
 .input-select-section { padding: 2rem 2rem 0; }
 .input-select-section h2 { font-size: 1rem; color: var(--dim); margin-bottom: 1rem; }
-.input-options { display: flex; gap: 1rem; }
+.input-options { display: flex; gap: 1rem; flex-wrap: wrap; }
 .input-opt {
   display: flex;
   flex-direction: column;
