@@ -1,0 +1,82 @@
+========================================================================
+  ZACH ALCASID DRUM ACADEMY — MEMBER SITE
+  Estimated Cost of a Manual Custom Build by Professional Developers
+  (Ballpark from reading the codebase — not a formal quote; swings +/-30%)
+========================================================================
+
+WHAT'S IN IT
+------------------------------------------------------------------------
+Auth & security     : registration, login, sessions/timeout, password
+                      reset, rate-limiting/lockout, CSRF, CSP + security
+                      headers, Google/Facebook OAuth
+Membership/payments : enrollment, free-trial flow, proof-of-payment,
+                      access gating, programs/pricing, IP-geo, profile
+                      completion, Stripe scaffolding
+Session scheduling  : calendar, booking/reschedule/cancel, credits,
+                      top-ups, email notifications
+Drum game           : canvas engine, timing/scoring/charts, MIDI input,
+                      acoustic mic detection + per-kit calibration
+                      (FFT/onset DSP), single-pad mode, audio sync, song
+                      library, progress tracking, fullscreen/mobile
+Chart Editor        : timeline recording, quantize, zoom/pan, undo,
+                      box-select, MIDI pad mapping, audio BPM/onset detect
+AI (Claude)         : placement test + coaching, 10-session plan
+                      generation, coach edit UI
+Admin panel         : users, students (CRUD/filters/bulk/payments),
+                      sessions, songs, placement tests, plan editor
+Plus                : full mobile-first responsive pass, email, uploads,
+                      DB migrations, deployment
+
+
+HOURS (professional custom build)
+------------------------------------------------------------------------
+  Area                                            Hours
+  ----------------------------------------------  -----------
+  Auth, security, OAuth                            65 - 100
+  Membership, payments, access, geo                60 -  90
+  Session scheduling                               60 -  90
+  Drum game engine (real-time)                     80 - 120
+  Acoustic DSP + calibration                       40 -  70
+  MIDI + single-pad                                20 -  35
+  Chart Editor                                     80 - 120
+  Song library + audio auto-detect                 30 -  50
+  AI features (placement, plan, coach)             40 -  60
+  Admin panel                                      60 -  90
+  Progress tracking                                15 -  25
+  Responsive / UX polish                           40 -  60
+  Email, uploads, misc                             20 -  30
+  Testing, debugging, deploy, revisions            90 - 140
+  ----------------------------------------------  -----------
+  TOTAL                                       ~ 700 - 1,100 hrs
+
+  Midpoint ~ 900 hours
+  (~5-6 months for one senior full-stack dev, or
+   ~3-4 months for a small team)
+
+
+COST BY TALENT TIER (at ~900 hrs)
+------------------------------------------------------------------------
+  Tier                                Rate/hr        Ballpark cost
+  ----------------------------------  -------------  ----------------
+  Offshore (PH / South Asia)          $15 - $35      $13k - $32k
+  Mid freelance (LatAm / E. Europe)   $40 - $70      $36k - $63k
+  US / EU senior or agency            $100 - $200    $90k - $180k
+
+  - Typical US agency quote:      ~ $120k - $180k
+  - Skilled mid-level freelancer: ~ $40k  - $60k
+  - Strong offshore team:         ~ $15k  - $30k
+
+
+WHY IT LANDS HIGH
+------------------------------------------------------------------------
+The game engine, the acoustic mic DSP/calibration, and the chart editor
+alone are ~200-310 hours of specialist real-time/audio work. That's the
+part that commands premium rates and that most generalist developers
+could not build quickly.
+
+Strip those three specialized pieces out and you'd have a "normal"
+membership site at maybe 350-500 hours.
+
+========================================================================
+  Prepared as a rough internal estimate. Not a binding quote.
+========================================================================
