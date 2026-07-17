@@ -1,6 +1,124 @@
-/* Landing page */
+/* Falling notes — ambient callback to the game's note highway, same 10 lane
+   colors. Fixed + first in DOM so it paints behind the opaque hero and only
+   shows through the plain sections below; transform-only animation (no
+   background-position loop) per the ui-ux-pro-max performance guideline. Low
+   opacity and slow so it reads as atmosphere, not gameplay. */
+.falling-notes {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.falling-notes .note {
+  position: absolute;
+  top: -8%;
+  height: 12px;
+  border-radius: 5px;
+  opacity: .1;
+  animation: note-fall linear infinite;
+}
+@keyframes note-fall {
+  from { transform: translateY(-10vh); }
+  to   { transform: translateY(110vh); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .falling-notes { display: none; }
+}
 
-.landing { background: var(--bg); }
+/* Hero-only variant: confined to the photo (not fixed to the viewport),
+   z-index 1 so it sits between the photo/scrim (0) and the text (2), and
+   plain illuminated white instead of lane colors so it reads as ambient
+   light over the image rather than the multi-color page-wide version. */
+.hero-notes {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hero-notes .note {
+  position: absolute;
+  top: -8%;
+  height: 11px;
+  border-radius: 5px;
+  background: rgba(255,255,255,.6);
+  box-shadow: 0 0 12px rgba(255,255,255,.55), 0 0 3px rgba(255,255,255,.8);
+  opacity: .16;
+  animation: note-fall linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-notes { display: none; }
+}
+
+/* Subtle film-grain texture over the whole page — cheap SVG noise, blended at
+   very low opacity so it adds tactile depth instead of a flat gradient look. */
+.landing::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Typography — Righteous/Poppins, the ui-ux-pro-max "Music/Entertainment" font
+   pairing (tagged for music platforms/performers). Self-hosted (latin subset
+   only) since the CSP blocks Google Fonts — same pattern as the Tabler icon
+   font. Landing-page only for now, not applied sitewide. */
+@font-face {
+  font-family: "Righteous";
+  src: url("../fonts/righteous-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("../fonts/poppins-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("../fonts/poppins-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("../fonts/poppins-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("../fonts/poppins-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Landing page — "Spotlight Aurora": stage-lights base + a glow tinted with
+   colors sampled directly from the hero photo (warm amber/red stage lighting,
+   wood-tone gold, a touch of guitar blue) instead of a generic accent set. */
+.landing {
+  background: var(--bg);
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --photo-amber: #f2701a;
+  --photo-red:   #d6362b;
+  --photo-gold:  #e0a339;
+  --photo-blue:  #2b8fb0;
+}
+/* Righteous is a single-weight display face — reserved for the hero headline
+   and the price number, not body text. */
+.landing .hero h1,
+.landing .price-amount {
+  font-family: "Righteous", "Poppins", -apple-system, sans-serif;
+}
 
 /* Nav */
 .landing .top-nav {
@@ -9,30 +127,108 @@
   position: absolute;
   width: 100%;
 }
-.landing .nav-brand { font-size: 1.3rem; }
+.landing .nav-brand { font-size: 1.3rem; display: flex; align-items: center; }
+/* Global .nav-links is left-aligned (flex:1) to suit the logged-in nav's
+   multi-item menu + separate right-pushed .nav-user block. The landing nav
+   only has Log In / Sign Up, so push them to the far right here instead. */
+.landing .nav-links { justify-content: flex-end; }
 .landing .nav-links a { color: rgba(255,255,255,.7); }
 .landing .nav-links a:hover { color: #fff; }
+/* CTA buttons pick up the photo's deep red rather than the sitewide violet
+   accent, so they read as part of this page's warm palette. (The brighter
+   --photo-amber only reaches ~3:1 contrast with white text — too low for
+   AA — so the button uses the darker red, which clears 4.5:1.) */
+.landing .btn-primary { background: var(--photo-red); }
+.landing .btn-primary:hover { opacity: .9; }
 
-/* Hero */
+/* Hero — the photo *is* the hero: full-bleed background, tinted by the same
+   aurora glow used elsewhere so it reads as part of the theme, not a pasted-in
+   stock photo. Text sits on a scrim over the darker (left) side of the frame. */
 .hero {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
+  min-height: 100dvh; /* avoids the mobile browser-chrome jump/shrink on 100vh */
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
   padding: 6rem 1.5rem 4rem;
-  background:
-    radial-gradient(ellipse at 20% 60%, rgba(124,106,245,.18) 0%, transparent 55%),
-    radial-gradient(ellipse at 80% 30%, rgba(91,79,207,.14) 0%, transparent 50%),
-    var(--bg);
+  background: var(--bg);
 }
-.hero-inner { max-width: 680px; }
+.hero-media { position: absolute; inset: 0; z-index: 0; }
+.hero-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  display: block;
+}
+/* The mobile source is a separate portrait crop (not just a smaller copy of
+   the desktop image), so it needs its own framing to keep the face and both
+   drumsticks in view once `cover` crops further to fit a tall phone screen. */
+@media (max-width: 640px) {
+  .hero-media img { object-position: 62% 15%; }
+}
+/* Scrim: below 900px the text column takes up too much of the frame's width
+   for a directional (left-only) darken to keep it legible, so use a uniform
+   wash there. From 900px up, a wide desktop canvas leaves enough room to
+   darken just the text side and let the photo read clearly on the right. */
+.hero-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, rgba(14,14,23,.6) 0%, transparent 40%),
+    rgba(14,14,23,.78);
+}
+@media (min-width: 900px) {
+  .hero-media::after {
+    background:
+      linear-gradient(100deg, rgba(14,14,23,.97) 0%, rgba(14,14,23,.92) 35%, rgba(14,14,23,.75) 55%, rgba(14,14,23,.4) 72%, rgba(14,14,23,.1) 88%),
+      linear-gradient(to top, rgba(14,14,23,.5) 0%, transparent 30%);
+  }
+}
+/* Aurora glow: a soft wash built from the photo's own warm amber/red/gold,
+   plus a small pop of the guitar's blue for contrast — reinforces the photo's
+   actual lighting instead of laying a foreign color scheme over it.
+   Settles in once on load (transform + opacity only, no background-position
+   loop) rather than animating continuously — cheaper to render and avoids
+   looping motion on a purely decorative element. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(242,112,26,.24) 0%, transparent 45%),
+    radial-gradient(circle at 78% 22%, rgba(214,54,43,.18) 0%, transparent 45%),
+    radial-gradient(circle at 62% 78%, rgba(43,143,176,.14) 0%, transparent 45%),
+    radial-gradient(circle at 14% 82%, rgba(224,163,57,.18) 0%, transparent 40%);
+  filter: blur(70px) saturate(1.3);
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(1.08) translate(-1%, -1%);
+  animation: aurora-settle 1.4s ease-out forwards;
+}
+@keyframes aurora-settle {
+  to { opacity: 1; transform: scale(1) translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero::before { animation: none; opacity: 1; transform: none; }
+}
+.hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 540px;
+  width: 100%;
+}
+.hero-text { text-align: left; }
 .hero h1 {
   font-size: clamp(2.5rem, 6vw, 4rem);
   font-weight: 800;
   line-height: 1.15;
   margin-bottom: 1.25rem;
-  background: linear-gradient(135deg, #fff 0%, #a59bff 100%);
+  background: linear-gradient(135deg, #fff 0%, var(--photo-amber) 55%, var(--photo-gold) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -43,23 +239,44 @@
   margin-bottom: 2rem;
   line-height: 1.7;
 }
-.hero-note { color: var(--text-dim); font-size: .88rem; margin-top: .75rem; }
 
 /* Features */
-.features { padding: 5rem 1.5rem; }
+.features { padding: 5rem 1.5rem; position: relative; }
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.5rem;
 }
 .feature-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 2rem 1.5rem;
   text-align: center;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: transform .2s, border-color .2s;
 }
-.feature-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+.feature-card:hover { transform: translateY(-3px); border-color: var(--card-glow, var(--glass-border)); }
+
+.feature-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto .9rem;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  background: color-mix(in srgb, var(--card-glow, var(--accent)) 18%, transparent);
+  color: var(--card-glow, var(--accent));
+}
+/* Spotlight color per card — sampled from the hero photo. */
+.feature-card--amber { --card-glow: var(--photo-amber); }
+.feature-card--red    { --card-glow: var(--photo-red); }
+.feature-card--blue   { --card-glow: var(--photo-blue); }
+.feature-card--gold   { --card-glow: var(--photo-gold); }
+
 .feature-card h3 { margin-bottom: .5rem; }
 .feature-card p  { color: var(--text-dim); font-size: .93rem; margin: 0; }
 
@@ -73,20 +290,31 @@
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  background: var(--bg2);
-  border: 2px solid var(--accent);
+  background: var(--glass-bg);
+  border: 2px solid var(--photo-gold);
   border-radius: var(--radius-lg);
   padding: 2.5rem 3rem;
   gap: 1rem;
   min-width: 280px;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 0 40px -12px rgba(224,163,57,.35);
 }
 .price-amount {
   font-size: 3rem;
   font-weight: 800;
-  color: var(--accent);
   line-height: 1;
+  background: linear-gradient(135deg, var(--photo-amber) 0%, var(--photo-gold) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.price-amount span { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); }
+.price-amount span {
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  -webkit-text-fill-color: var(--text-dim);
+}
 .price-features {
   list-style: none;
   text-align: left;
@@ -96,3 +324,4 @@
   color: var(--text-dim);
   font-size: .95rem;
 }
+.price-features .ti { color: var(--success); margin-right: .4rem; }

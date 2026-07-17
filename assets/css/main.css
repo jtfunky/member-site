@@ -1,22 +1,29 @@
 /* ── Reset & Base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Stage lights theme ── deep ink surfaces, violet action color, magenta
+   reserved for highlights (Exclusive). Icons inherit these via currentColor. */
 :root {
-  --bg:       #0d0d0f;
-  --bg2:      #16161a;
-  --bg3:      #1e1e24;
-  --border:   #2a2a35;
-  --text:     #e8e8f0;
-  --text-dim: #8888aa;
-  --accent:   #7c6af5;
-  --accent2:  #5b4fcf;
-  --success:  #22c55e;
-  --warning:  #f59e0b;
-  --danger:   #ef4444;
-  --info:     #38bdf8;
-  --radius:   8px;
-  --radius-lg:16px;
-  --shadow:   0 4px 24px rgba(0,0,0,.4);
+  --bg:        #0e0e17;
+  --bg2:       #17172a;
+  --bg3:       #1f1f38;
+  --border:    #2c2c44;
+  --text:      #e8e8f0;
+  --text-dim:  #8d8da6;
+  --accent:    #8b5cf6;
+  --accent2:   #7c3aed;
+  --accent-hot:#d946ef;
+  --success:   #34d399;
+  --warning:   #fbbf24;
+  --danger:    #f87171;
+  --info:      #38bdf8;
+  --gold:      #f0b429;
+  --glass-bg:     rgba(255,255,255,.06);
+  --glass-border: rgba(255,255,255,.14);
+  --glass-blur:   16px;
+  --radius:    8px;
+  --radius-lg: 16px;
+  --shadow:    0 4px 24px rgba(0,0,0,.4);
 }
 
 html { font-size: 16px; scroll-behavior: smooth; }
