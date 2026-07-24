@@ -18,22 +18,22 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="tile-grid">
   <div class="tile tile--placeholder">
-    <div class="tile-icon">🎓</div>
+    <div class="tile-icon"><i class="ti ti-school" aria-hidden="true"></i></div>
     <h3>Beginner Lessons</h3>
     <p>Coming soon — fundamental drumming techniques for beginners.</p>
   </div>
   <div class="tile tile--placeholder">
-    <div class="tile-icon">🥁</div>
+    <div class="tile-icon"><i class="ti ti-music" aria-hidden="true"></i></div>
     <h3>Advanced Patterns</h3>
     <p>Coming soon — complex rhythmic patterns for experienced players.</p>
   </div>
   <div class="tile tile--placeholder">
-    <div class="tile-icon">🎵</div>
+    <div class="tile-icon"><i class="ti ti-playlist" aria-hidden="true"></i></div>
     <h3>Backing Tracks</h3>
     <p>Coming soon — drum-free tracks to practice along with.</p>
   </div>
   <div class="tile tile--placeholder">
-    <div class="tile-icon">📹</div>
+    <div class="tile-icon"><i class="ti ti-video" aria-hidden="true"></i></div>
     <h3>Video Tutorials</h3>
     <p>Coming soon — video lessons from professional drummers.</p>
   </div>

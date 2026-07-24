@@ -39,6 +39,36 @@ if ($hasTable && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'No students were selected.';
         }
 
+    } elseif ($action === 'remind') {
+        // Email one enrollee a payment reminder.
+        $sid = (int) ($_POST['student_id'] ?? 0);
+        $st  = $db->prepare('SELECT * FROM students WHERE id = ?');
+        $st->execute([$sid]);
+        $s = $st->fetch();
+        if ($s && sendPaymentReminder($s)) {
+            $message = 'Payment reminder sent to ' . $s['email'] . '.';
+        } else {
+            $error = 'Could not send the reminder — the student has no valid email, or the mailer failed.';
+        }
+
+    } elseif ($action === 'remind_pending') {
+        // Email every enrollee whose course payment is still unconfirmed.
+        // Pending = a session-granting (paid) program + payment not confirmed —
+        // the same predicate as the site-wide "payment pending" banner.
+        $rows = $db->query('SELECT * FROM students WHERE email IS NOT NULL AND email <> ""')->fetchAll();
+        $sent = 0; $skipped = 0; $failed = 0;
+        foreach ($rows as $s) {
+            if (creditsForProgram(trim((string) ($s['program'] ?? ''))) <= 0) continue; // not a paid course
+            if (studentPaymentConfirmed($s)) continue;                                   // already paid
+            // Don't double-send within ~20h (when the tracking column exists).
+            $last = $s['payment_reminded_at'] ?? null;
+            if ($last && (time() - strtotime($last)) < 20 * 3600) { $skipped++; continue; }
+            if (sendPaymentReminder($s)) $sent++; else $failed++;
+        }
+        $message = "Payment reminders sent: {$sent}"
+                 . ($skipped ? " · skipped {$skipped} (already reminded today)" : '')
+                 . ($failed ? " · {$failed} failed" : '');
+
     } elseif ($action === 'update') {
         $id    = (int) ($_POST['student_id'] ?? 0);
         $email = trim($_POST['email'] ?? '');
@@ -345,6 +375,33 @@ if ($hasTable) {
     $students = $lst->fetchAll();
 }
 
+// Email a payment reminder to a pending enrollee and record when it was sent.
+// Returns true once the mail is handed to the transport.
+function sendPaymentReminder(array $s): bool {
+    if (empty($s['email']) || !filter_var($s['email'], FILTER_VALIDATE_EMAIL)) return false;
+    $first  = trim((string) ($s['first_name'] ?? '')) ?: 'there';
+    $prog   = trim((string) ($s['program'] ?? '')) ?: 'your enrollment';
+    $amount = ($s['program_amount'] ?? '') !== '' && $s['program_amount'] !== null
+        ? trim(($s['currency'] ?? '') . ' ' . number_format((float) $s['program_amount'], 0))
+        : '';
+    $body = "Hi {$first},\n\n"
+        . "Just a friendly reminder that your enrollment payment for \"{$prog}\""
+        . ($amount !== '' ? " ({$amount})" : '') . " is still pending.\n\n"
+        . "Once you've paid, please submit your proof of payment here so we can confirm it and activate your sessions:\n"
+        . SITE_URL . "/my-membership.php\n\n"
+        . "Already settled it? Please disregard this email — we may simply not have confirmed it yet.\n\n"
+        . "Thank you!\n— " . SITE_NAME;
+
+    $ok = sendMail($s['email'], SITE_NAME . ' — payment reminder', $body);
+    if ($ok) {
+        try {
+            db()->prepare('UPDATE students SET payment_reminded_at = NOW() WHERE id = ?')
+                ->execute([(int) $s['id']]);
+        } catch (\Throwable $e) { /* tracking column not migrated — the mail still went out */ }
+    }
+    return $ok;
+}
+
 function moneyFmt(?string $amount, string $currency): string {
     if ($amount === null || $amount === '') return '—';
     $sym = $currency === 'PHP' ? '₱' : ($currency === 'USD' ? '$' : '');
@@ -376,6 +433,7 @@ require __DIR__ . '/../includes/header.php';
     <a href="/admin/sessions.php">Sessions</a>
     <a href="/admin/songs.php">Songs</a>
     <a href="/admin/placement-tests.php">Placement Tests</a>
+    <a href="/admin/investor-agreement.php">Investor Agreement</a>
   </div>
 </div>
 
@@ -660,11 +718,18 @@ require __DIR__ . '/../includes/header.php';
   <h2><?= $q !== '' ? 'Results' : 'All Enrollments' ?> <span class="text-sm">(<?= $total ?>)</span></h2>
   <a href="/admin/students.php?new=1" class="btn btn-primary btn-sm">+ Add Student</a>
 </div>
-<form id="bulk-delete-form" method="POST" data-confirm="Delete the selected enrollment records? This cannot be undone." style="margin:.5rem 0;">
-  <?= csrfField() ?>
-  <input type="hidden" name="action" value="bulk_delete">
-  <button type="submit" id="bulk-delete-btn" class="btn btn-danger btn-sm" disabled>🗑 Delete selected (<span id="bulk-count">0</span>)</button>
-</form>
+<div style="margin:.5rem 0; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+  <form id="bulk-delete-form" method="POST" data-confirm="Delete the selected enrollment records? This cannot be undone." style="display:inline">
+    <?= csrfField() ?>
+    <input type="hidden" name="action" value="bulk_delete">
+    <button type="submit" id="bulk-delete-btn" class="btn btn-danger btn-sm" disabled><i class="ti ti-trash" aria-hidden="true"></i> Delete selected (<span id="bulk-count">0</span>)</button>
+  </form>
+  <form method="POST" style="display:inline" data-confirm="Email a payment reminder to every enrollee with a pending course payment? (Anyone already reminded in the last day is skipped.)">
+    <?= csrfField() ?>
+    <input type="hidden" name="action" value="remind_pending">
+    <button type="submit" class="btn btn-ghost btn-sm" title="Emails everyone on a paid program whose payment isn't confirmed yet"><i class="ti ti-mail" aria-hidden="true"></i> Remind pending payments</button>
+  </form>
+</div>
 <div class="table-scroll">
 <table class="data-table">
   <thead>
@@ -693,6 +758,9 @@ require __DIR__ . '/../includes/header.php';
         <?php if (!empty($s['payment_status'])): ?>
           <span class="badge"><?= htmlspecialchars($s['payment_status']) ?></span>
         <?php else: ?>—<?php endif; ?>
+        <?php if (!empty($s['payment_reminded_at'])): ?>
+          <div style="opacity:.65;font-size:.72rem" title="Last payment reminder emailed">reminded <?= date('M j', strtotime($s['payment_reminded_at'])) ?></div>
+        <?php endif; ?>
       </td>
       <td>
         <?php if ($s['proof_url']): ?>
@@ -701,6 +769,16 @@ require __DIR__ . '/../includes/header.php';
       </td>
       <td><?= $s['enrolled_at'] ? date('M j, Y', strtotime($s['enrolled_at'])) : '—' ?></td>
       <td style="white-space:nowrap">
+        <?php $rowPending = creditsForProgram(trim((string) ($s['program'] ?? ''))) > 0
+            && !studentPaymentConfirmed($s) && !empty($s['email']); ?>
+        <?php if ($rowPending): ?>
+        <form method="POST" style="display:inline">
+          <?= csrfField() ?>
+          <input type="hidden" name="action" value="remind">
+          <input type="hidden" name="student_id" value="<?= (int) $s['id'] ?>">
+          <button type="submit" class="btn btn-ghost btn-xs" title="Email a payment reminder to this student"><i class="ti ti-mail" aria-hidden="true"></i> Remind</button>
+        </form>
+        <?php endif; ?>
         <a href="/admin/students.php?edit=<?= (int) $s['id'] ?>" class="btn btn-ghost btn-xs">Edit</a>
         <form method="POST" style="display:inline" data-confirm="Delete this enrollment record? This cannot be undone.">
           <?= csrfField() ?>

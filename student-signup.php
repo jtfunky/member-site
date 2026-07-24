@@ -45,12 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Please enter a valid date of birth.';
         } elseif (!isset($PROGRAMS[$prog])) {
             $error = 'Please choose a program.';
+        } elseif (($proofCheck = validateProofUpload($_FILES['proof'] ?? ['error' => UPLOAD_ERR_NO_FILE])) !== true) {
+            $error = $proofCheck;
         } else {
-            // Create the login account with a free trial (instant game/content
-            // access). Session access stays locked — the enrollment is recorded
-            // as payment "Pending", and an admin confirms payment to grant credits.
-            $username = uniqueUsernameFromEmail($email);
-            $result   = registerUser($username, $email, $pass, $first, $last);
+            // Create the login account locked ("pending", no access) — proof of
+            // payment is required up front now, so there's no free trial on this
+            // path. An admin confirms the proof to grant access + session credits.
+            $result = createEnrolleeAccount($email, $pass, $first, $last);
             if (is_string($result)) {
                 $error = $result;
             } else {
@@ -64,21 +65,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $country  = trim($_POST['address'] ?? '');
                 if ($country === '') $country = getUserCountryName();
 
+                $proofUrl = null;
+                if (!is_dir(UPLOAD_PROOF_DIR)) @mkdir(UPLOAD_PROOF_DIR, 0755, true);
+                $ext      = strtolower(pathinfo($_FILES['proof']['name'], PATHINFO_EXTENSION));
+                $filename = 'proof_' . $userId . '_' . time() . '.' . $ext;
+                if (move_uploaded_file($_FILES['proof']['tmp_name'], UPLOAD_PROOF_DIR . $filename)) {
+                    $proofUrl = UPLOAD_PROOF_URL . $filename;
+                }
+
                 db()->prepare(
                     'INSERT INTO students
                        (user_id, enrolled_at, email, last_name, first_name, middle_initial,
                         full_name, age, date_of_birth, parent_guardian, address, phone,
-                        experience, program, program_amount, currency,
+                        experience, program, program_amount, currency, proof_url,
                         payment_status, source_file)
-                     VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "PHP", "Pending", "enroll")'
+                     VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "PHP", ?, "For review", "enroll")'
                 )->execute([
                     $userId, $email, $last, $first, $mi, $full, $age, $dob,
                     $guardian, $country, $phone, $level, $prog,
-                    $PROGRAMS[$prog],
+                    $PROGRAMS[$prog], $proofUrl,
                 ]);
 
-                notifyAdmins('New enrollment submitted',
-                    "$full signed up for a free trial and enrolled interest in \"$prog\". Confirm payment in Admin → Students to unlock their one-on-one sessions.");
+                notifySignup('New enrollment submitted',
+                    "$full enrolled in \"$prog\" and submitted proof of payment. Review it in Admin → Students to confirm and unlock their sessions.");
 
                 loginById($userId);
                 header('Location: ' . SITE_URL . '/my-membership.php?submitted=1');
@@ -98,13 +107,14 @@ require __DIR__ . '/includes/header.php';
 ?>
 <div class="auth-card auth-card--wide">
   <a class="auth-logo" href="/"><?= SITE_NAME ?></a>
+  <p class="field-hint" style="text-align:center; margin-top:-1rem; margin-bottom:1.5rem;">Panay Ave. cor. Roces Ave., Quezon City</p>
   <h1>Student Enrollment</h1>
 
   <?php if ($error): ?>
   <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
   <?php endif; ?>
 
-  <form method="POST" action="/student-signup.php">
+  <form method="POST" action="/student-signup.php" enctype="multipart/form-data">
     <?= csrfField() ?>
 
     <div class="form-row">
@@ -148,12 +158,12 @@ require __DIR__ . '/includes/header.php';
 
     <div class="form-group">
       <label>Mobile Number</label>
-      <div style="display:flex; gap:.5rem;">
-        <select name="country_code" style="flex:0 0 auto; max-width:11rem;">
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <select name="country_code" style="flex:0 0 auto; max-width:6.5rem;">
           <?php $picked = false; foreach (getCountries() as $c):
               $sel = (!$picked && $c['dial'] === $curDial) ? 'selected' : '';
               if ($sel) $picked = true; ?>
-            <option value="<?= htmlspecialchars($c['dial']) ?>" <?= $sel ?>><?= flagEmoji($c['iso']) ?> <?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['dial']) ?>)</option>
+            <option value="<?= htmlspecialchars($c['dial']) ?>" <?= $sel ?>><?= flagEmoji($c['iso']) ?> <?= htmlspecialchars($c['dial']) ?></option>
           <?php endforeach; ?>
         </select>
         <input type="tel" name="phone" inputmode="numeric" placeholder="Mobile number" style="flex:1;" value="<?= htmlspecialchars($old['phone'] ?? '') ?>">
@@ -186,6 +196,30 @@ require __DIR__ . '/includes/header.php';
       <input type="text" name="parent_guardian" value="<?= htmlspecialchars($old['parent_guardian'] ?? '') ?>">
     </div>
 
+    <div class="program-plans">
+      <div class="plan-card">
+        <h3>Distance Learning (Online)</h3>
+        <ul class="plan-features">
+          <li>1-on-1 mentorship</li>
+          <li>1 hour and 30 mins Session</li>
+          <li>Exclusive mentorship especially for students who would like to gain further knowledge with drumming</li>
+        </ul>
+        <p class="plan-price">₱2,000 <span>per session</span></p>
+        <p class="plan-price">₱9,000 <span>6 sessions</span></p>
+      </div>
+      <div class="plan-card">
+        <h3>1 on 1 Face to Face (F2F)</h3>
+        <ul class="plan-features">
+          <li>Access to 6 in-person drum classes</li>
+          <li>1 hour and 30 mins Session</li>
+          <li>Unlimited access to exclusive content</li>
+          <li>Exclusive mentorship especially for students who would like to gain further knowledge with drumming</li>
+        </ul>
+        <p class="plan-price">₱9,000</p>
+        <p class="plan-note">Downpayment fee: ₱1,000</p>
+      </div>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label>Program <span class="required">*</span></label>
@@ -200,6 +234,26 @@ require __DIR__ . '/includes/header.php';
         <label>Amount</label>
         <input type="text" id="amountDisplay" readonly placeholder="—">
       </div>
+    </div>
+
+    <div class="plan-card">
+      <h3>Payment</h3>
+      <p>We <strong>ONLY</strong> accept GCash, PayPal, and Bank Transfers. <strong>STRICTLY</strong>, inaccurate screenshots will be nullified.</p>
+      <ul class="pay-methods">
+        <li><strong>GCash:</strong> 09566756845</li>
+        <li><strong>PayPal:</strong> <a href="https://www.paypal.me/zachalcasid" target="_blank" rel="noopener">paypal.me/zachalcasid</a></li>
+        <li><strong>Bank:</strong> Bank of the Philippine Islands<br>
+          Account name: Zach Machiavell L. Alcasid<br>
+          Account number: 0319213457</li>
+      </ul>
+    </div>
+
+    <p style="text-align:center; font-weight:700;">Exact address &amp; schedules will be sent to your email upon confirmation of payment.</p>
+
+    <div class="form-group">
+      <label>Upload proof of payment <span class="required">*</span></label>
+      <input type="file" name="proof" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" required>
+      <span class="field-hint">Image or PDF, up to 5 MB. You won't get access until we confirm it.</span>
     </div>
 
     <button type="submit" class="btn btn-primary btn-block">Enroll</button>

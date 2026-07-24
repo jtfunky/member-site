@@ -1,14 +1,15 @@
 /* Game page — full screen, dark */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Stage lights theme (game-page overrides of the site palette) */
 :root {
-  --bg:     #0a0a0c;
-  --bg2:    #13131a;
-  --bg3:    #1c1c26;
-  --border: #2a2a38;
+  --bg:     #0e0e17;
+  --bg2:    #17172a;
+  --bg3:    #1f1f38;
+  --border: #2c2c44;
   --text:   #e8e8f0;
-  --dim:    #7a7a9a;
-  --accent: #7c6af5;
+  --dim:    #8d8da6;
+  --accent: #8b5cf6;
   --radius: 8px;
 }
 
@@ -58,7 +59,7 @@ body.game-body {
 #screen-menu {
   flex-direction: column;
   overflow-y: auto;
-  background: radial-gradient(ellipse at 30% 50%, rgba(124,106,245,.12) 0%, transparent 60%), var(--bg);
+  background: radial-gradient(ellipse at 30% 50%, rgba(139,92,246,.12) 0%, transparent 60%), var(--bg);
 }
 
 .menu-header {
@@ -92,7 +93,7 @@ body.game-body {
   min-width: 120px;
 }
 .input-opt:hover { border-color: var(--accent); }
-.input-opt.selected { border-color: var(--accent); background: rgba(124,106,245,.1); }
+.input-opt.selected { border-color: var(--accent); background: rgba(139,92,246,.1); }
 .input-icon { font-size: 1.5rem; }
 .input-opt small { color: var(--dim); font-size: .78rem; }
 
@@ -128,6 +129,74 @@ body.game-body {
 .song-item-info strong { font-size: .95rem; }
 .song-item-info span  { font-size: .82rem; color: var(--dim); }
 .song-meta { font-size: .78rem !important; }
+.song-audio-state { font-size: .75rem !important; color: var(--accent) !important; }
+.song-excl { font-size: .68rem; font-weight: 700; color: #f0abfc; background: rgba(217,70,239,.15); border-radius: 999px; padding: .05rem .45rem; margin-left: .4rem; vertical-align: middle; }
+
+/* ── Practice-plan session pass/fail banner (results screen) ── */
+.plan-result { margin: 0 auto 1rem; max-width: 480px; text-align: center; }
+.plan-result .pr-msg { font-size: 1.15rem; font-weight: 700; padding: .6rem 1rem; border-radius: 10px; margin-bottom: .6rem; }
+.plan-result .pr-msg.pass { background: rgba(34,197,94,.15); color: #4ade80; }
+.plan-result .pr-msg.fail { background: rgba(245,158,11,.15); color: #fcd34d; }
+.plan-result .pr-actions { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
+
+/* ── Practice speed scrubber ── */
+.speed-row { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; font-size: .85rem; color: var(--dim); }
+.speed-scrubber { flex: 1; max-width: 220px; }
+.speed-scrubber input[type="range"] { display: block; width: 100%; margin: 0; }
+.speed-ticks { display: flex; justify-content: space-between; font-size: .68rem; color: var(--dim); margin-top: .1rem; padding: 0 2px; }
+.speed-row .field-hint { color: #fcd34d; font-size: .78rem; }
+
+/* ── Song tag filter (admin-managed categories) ── */
+.song-tag-filter { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-bottom: .8rem; }
+.stf-group { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.stf-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+.stf-chip { font-size: .78rem; background: var(--bg2); border: 1px solid var(--border); color: inherit; border-radius: 999px; padding: .2rem .7rem; cursor: pointer; }
+.stf-chip:hover { border-color: var(--accent); }
+.stf-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stf-clear { font-size: .74rem; background: transparent; border: none; color: var(--dim); cursor: pointer; }
+.stf-clear:hover { color: #fff; }
+
+.song-item-actions { display: flex; align-items: center; gap: .5rem; }
+
+/* ── YouTube casual mode ── */
+/* Video fills its side panel — kept visible (not hidden) on purpose: mobile
+   browsers pause hidden videos, which would kill the music, and YouTube's
+   embed terms require a visible player. */
+.yt-stage {
+  display: none;          /* shown (via .active) only while a YouTube song plays */
+  position: absolute; inset: 0; z-index: 5;
+  width: 100%; height: 100%; background: #000;
+}
+.yt-stage.active { display: block; }
+.yt-stage iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.yt-loading {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .4rem; background: rgba(0,0,0,.82); color: #fff;
+  font-size: 1rem; font-weight: 600; text-align: center; padding: 1rem;
+}
+.yt-loading[hidden] { display: none; }
+.yt-loading span { font-size: .78rem; font-weight: 400; color: var(--dim); max-width: 90%; }
+
+.record-tip {
+  position: fixed; top: 56px; right: 12px; z-index: 30;
+  max-width: 260px; padding: .55rem .8rem; border-radius: 8px;
+  background: rgba(0,0,0,.88); border: 1px solid rgba(239,68,68,.4);
+  color: #fff; font-size: .78rem; line-height: 1.4;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+}
+.record-tip[hidden] { display: none; }
+
+.tutorial-banner {
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 25;
+  max-width: min(85%, 340px); padding: .7rem 1.1rem; border-radius: 10px;
+  background: rgba(0,0,0,.85); border: 1px solid var(--lane-color, var(--accent, #8b5cf6));
+  color: #fff; font-size: .88rem; line-height: 1.45; text-align: center;
+  box-shadow: 0 6px 22px rgba(0,0,0,.5);
+}
+.tutorial-banner strong { color: var(--lane-color, var(--accent, #8b5cf6)); text-transform: uppercase; letter-spacing: .04em; }
+.tutorial-banner[hidden] { display: none; }
 
 /* Settings overlay */
 #screen-settings {
@@ -176,7 +245,12 @@ body.game-body {
 .hud-center { font-size: .9rem; color: var(--dim); }
 .hud-right { display: flex; align-items: center; gap: .5rem; }
 
-#game-canvas { flex: 1; display: block; width: 100%; }
+/* Gameplay body: canvas at 70%, a video side panel at 30% — always split,
+   even on songs with no video (the panel just sits empty). */
+.game-body { flex: 1; min-height: 0; display: flex; flex-direction: row; }
+.canvas-wrap { flex: 0 0 70%; width: 70%; min-width: 0; position: relative; }
+#game-canvas { display: block; width: 100%; height: 100%; }
+.side-panel { flex: 0 0 30%; width: 30%; min-width: 0; position: relative; background: var(--bg2); border-left: 1px solid var(--border); }
 
 .judgment-popup {
   position: absolute;
@@ -258,6 +332,9 @@ body.game-body {
 .btn-ghost    { background: transparent; color: var(--dim); border: 1px solid var(--border); }
 .btn-exit     { background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,.4); }
 .btn-exit:hover { border-color: #ef4444; opacity: 1; }
+#btn-record.recording { color: #ef4444; border-color: rgba(239,68,68,.5); }
+#btn-record.recording i { animation: record-pulse 1.2s ease-in-out infinite; }
+@keyframes record-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .btn-sm { padding: .35rem .8rem; font-size: .82rem; }
 .btn-block { width: 100%; display: flex; }
 

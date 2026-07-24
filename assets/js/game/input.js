@@ -17,8 +17,6 @@ const DEFAULT_MAP = {
 let noteMap     = { ...DEFAULT_MAP };
 let channelFilter = -1; // -1 = any channel
 
-const hitBuffer = [];
-
 export function setNoteMap(map) {
   noteMap = { ...DEFAULT_MAP, ...map };
 }
@@ -27,15 +25,17 @@ export function setChannelFilter(ch) {
   channelFilter = ch;
 }
 
-export function onMidiMessage(event) {
-  if (channelFilter !== -1 && event.channel !== channelFilter) return;
+// Filters + maps a raw MIDI event to a lane, synchronously, with nothing
+// buffered — a hit used to sit in a queue that only got drained once per
+// animation frame (up to ~16ms after the physical hit, since frames run at
+// ~60fps), which is audible as the hit sound trailing the real drum. The
+// caller processes this the instant it's returned, same as the hardware
+// event itself arrived instantly.
+export function mapMidiEvent(event) {
+  if (channelFilter !== -1 && event.channel !== channelFilter) return null;
   const lane = noteMap[event.note];
-  if (lane === undefined) return;
-  hitBuffer.push({ lane, velocity: event.velocity, timestamp: event.timestamp });
-}
-
-export function flushHits() {
-  return hitBuffer.splice(0, hitBuffer.length);
+  if (lane === undefined) return null;
+  return { lane, velocity: event.velocity, timestamp: event.timestamp };
 }
 
 export function getDefaultMap() {

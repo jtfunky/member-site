@@ -1,7 +1,8 @@
 // Audio player — loads from URL (no base64 needed)
 // Uses Web Audio API for precise sync with game time
 
-let ctx         = null;
+import { getSharedCtx, getRecordDestination } from './audio-context.js?v=20260720c';
+
 let source      = null;
 let audioBuffer = null;
 let startOffset = 0;
@@ -10,8 +11,7 @@ let paused      = false;
 let pausedAt    = 0;
 
 function getCtx() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-  return ctx;
+  return getSharedCtx();
 }
 
 export async function loadAudioUrl(url) {
@@ -31,7 +31,28 @@ export async function loadAudioUrl(url) {
   }
 }
 
-export function playAudio(offsetMs = 0) {
+// Load a track the user picked from their own computer (a File from an <input
+// type=file>). Decoded and played entirely in the browser — nothing is uploaded
+// or stored on the server. Same buffer path as loadAudioUrl, so playback stays
+// sample-accurately synced to the chart.
+export async function loadAudioFile(file) {
+  if (!file) return false;
+  unloadAudio();
+  try {
+    const ac  = getCtx();
+    const buf = await file.arrayBuffer();
+    audioBuffer = await ac.decodeAudioData(buf);
+    return true;
+  } catch (e) {
+    console.warn('DrumKit: local audio decode failed:', e.message);
+    audioBuffer = null;
+    return false;
+  }
+}
+
+let playRate = 1;   // practice speed (1 / 0.75 / 0.5); buffer position advances at this rate
+
+export function playAudio(offsetMs = 0, rate = 1) {
   if (!audioBuffer) return;
   const ac = getCtx();
   if (ac.state === 'suspended') ac.resume();
@@ -39,7 +60,10 @@ export function playAudio(offsetMs = 0) {
   stopAudio();
   source        = ac.createBufferSource();
   source.buffer = audioBuffer;
+  playRate      = rate > 0 ? rate : 1;
+  source.playbackRate.value = playRate;   // slows audio (pitch drops with it)
   source.connect(ac.destination);
+  source.connect(getRecordDestination());
 
   startOffset = offsetMs / 1000;
   startedAt   = ac.currentTime;
@@ -50,14 +74,15 @@ export function playAudio(offsetMs = 0) {
 export function pauseAudio() {
   if (!source || paused) return;
   const ac = getCtx();
-  pausedAt = ac.currentTime - startedAt + startOffset;
+  // Buffer position advances at playRate × real time.
+  pausedAt = (ac.currentTime - startedAt) * playRate + startOffset;
   stopAudio();
   paused = true;
 }
 
 export function resumeAudio() {
   if (!paused) return;
-  playAudio(pausedAt * 1000);
+  playAudio(pausedAt * 1000, playRate);
 }
 
 export function stopAudio() {

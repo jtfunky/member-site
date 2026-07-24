@@ -15,6 +15,13 @@ function getDaysRemaining(array $user): int {
 }
 
 function requirePremium(array $user): void {
+    // Scoped staff (editor/partner) aren't students — send them to their own home
+    // rather than the student payment flow.
+    $role = $user['role'] ?? 'user';
+    if ($role === 'editor' || $role === 'partner') {
+        header('Location: ' . SITE_URL . roleHome($role));
+        exit;
+    }
     if (hasPremiumAccess($user)) return;
 
     // Enrollees awaiting payment confirmation can only see their own
@@ -71,9 +78,9 @@ function requirePlacementTest(array $user): void {
     // Already taken? (a saved drum test satisfies the requirement)
     if (hasTakenPlacementTest((int) $user['id'])) return;
 
-    // Allow the placement pages themselves (the intro + the test play).
+    // Allow the placement pages themselves (the intro + the tutorial + the test play).
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-    if ($path === '/placement-test.php' || ($path === '/game.php' && !empty($_GET['test']))) return;
+    if ($path === '/placement-test.php' || ($path === '/game.php' && (!empty($_GET['test']) || !empty($_GET['tutorial'])))) return;
 
     header('Location: ' . SITE_URL . '/placement-test.php');
     exit;

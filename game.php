@@ -9,10 +9,10 @@ if (!empty($_GET['test']) && ($user['role'] ?? '') !== 'admin' && hasTakenPlacem
     exit;
 }
 requirePlacementTest($user);   // new signups take the placement test first (self-allows ?test=1)
-// The placement test (?test=1) is open to any enrolled student regardless of
-// membership status — it uses only the free built-in exercise. The full game
-// (song library) stays members-only.
-if (empty($_GET['test'])) requirePremium($user);
+// The placement test (?test=1) — and the tutorial shown before a student's
+// first attempt (?tutorial=1) — are open to any enrolled student regardless
+// of membership status. The full game (song library) stays members-only.
+if (empty($_GET['test']) && empty($_GET['tutorial'])) requirePremium($user);
 
 $pageTitle = 'Drum Game — ' . SITE_NAME;
 $pageCss   = ['game'];
@@ -76,7 +76,7 @@ require __DIR__ . '/includes/header.php';
 
 <!-- ── Rotate overlay (portrait mobile/tablet) ──────────── -->
 <div class="rotate-overlay">
-  <div class="rotate-icon">📱</div>
+  <div class="rotate-icon"><i class="ti ti-device-mobile" aria-hidden="true"></i></div>
   <div class="rotate-title">Rotate your device</div>
   <div class="rotate-sub">This game is designed for landscape mode</div>
 </div>
@@ -85,7 +85,7 @@ require __DIR__ . '/includes/header.php';
 
 <div id="screen-menu" class="screen active">
   <div class="menu-header">
-    <h1>🥁 <?= SITE_NAME ?></h1>
+    <h1><i class="ti ti-music" aria-hidden="true"></i> <?= SITE_NAME ?></h1>
     <div class="menu-user">
       <?= htmlspecialchars($user['first_name'] ?: $user['username']) ?>
       <a href="/dashboard.php" class="btn btn-ghost btn-sm">Dashboard</a>
@@ -96,17 +96,17 @@ require __DIR__ . '/includes/header.php';
     <h2>Choose your input</h2>
     <div class="input-options">
       <button class="input-opt" data-input="midi">
-        <span class="input-icon">🥁</span>
+        <span class="input-icon"><i class="ti ti-usb" aria-hidden="true"></i></span>
         <span>E-Drum Kit</span>
         <small>USB MIDI</small>
       </button>
       <button class="input-opt" data-input="acoustic">
-        <span class="input-icon">🎙️</span>
+        <span class="input-icon"><i class="ti ti-microphone" aria-hidden="true"></i></span>
         <span>Acoustic Drums</span>
         <small>Via microphone</small>
       </button>
-      <button class="input-opt" data-input="pad">
-        <span class="input-icon">🪘</span>
+      <button class="input-opt" data-input="pad" style="display:none">
+        <span class="input-icon"><i class="ti ti-target" aria-hidden="true"></i></span>
         <span>Practice Pad</span>
         <small>Single pad · via microphone</small>
       </button>
@@ -115,16 +115,44 @@ require __DIR__ . '/includes/header.php';
 
     <!-- Acoustic calibration: teach the app each drum. Shown when Acoustic is chosen. -->
     <div id="acoustic-calibration" class="acoustic-cal" style="display:none">
-      <h3>🎚️ Calibrate your kit</h3>
+      <h3><i class="ti ti-adjustments" aria-hidden="true"></i> Calibrate your kit</h3>
       <p class="field-hint">Tap a drum below, then hit it <strong>4 times</strong> so the app learns its sound. The <strong>required</strong> drums must be done before you can play; add cymbals/toms if your kit has them.</p>
       <div id="cal-list" class="cal-list"></div>
     </div>
 
-    <div id="input-required-msg" class="input-required">🔒 Choose your input above to unlock the song library.</div>
+    <!-- E-drum pad mapping: bind a kit's MIDI notes to lanes manually. Shown when
+         E-Drum Kit is chosen; only needed if a pad doesn't register by default. -->
+    <div id="padmap-wrap" style="display:none; margin-top:.75rem;">
+      <button id="padmap-toggle" class="btn btn-ghost btn-sm"><i class="ti ti-adjustments" aria-hidden="true"></i> Map pads</button>
+      <div id="pad-map" class="acoustic-cal" style="display:none">
+        <p class="field-hint">Only needed if a drum doesn't register: click <strong>Assign</strong>, then strike that pad on your kit once. Saved on this device.</p>
+        <div id="padmap-list" class="cal-list"></div>
+        <button id="padmap-reset" class="btn btn-ghost btn-sm" style="margin-top:.5rem"><i class="ti ti-refresh" aria-hidden="true"></i> Reset all to defaults</button>
+      </div>
+    </div>
+
+    <div id="input-required-msg" class="input-required"><i class="ti ti-lock" aria-hidden="true"></i> Choose your input above to unlock the song library.</div>
   </div>
 
   <div id="song-library" class="song-library" style="display:none">
     <h2>Song Library</h2>
+    <div id="speed-row" class="speed-row">
+      <label for="play-rate">Speed</label>
+      <div class="speed-scrubber">
+        <input type="range" id="play-rate" min="0" max="2" step="1" value="2">
+        <div class="speed-ticks"><span>50%</span><span>75%</span><span>100%</span></div>
+      </div>
+      <span id="play-rate-hint" class="field-hint" style="display:none"></span>
+    </div>
+    <div id="precision-row" class="speed-row">
+      <label for="precision-mode-toggle">Precision Mode</label>
+      <label class="toggle">
+        <input type="checkbox" id="precision-mode-toggle">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="field-hint">Much tighter timing windows for a real challenge</span>
+    </div>
+    <div id="song-tag-filter" class="song-tag-filter"></div>
     <div id="song-list" class="song-list">
       <div class="loading">Loading songs…</div>
     </div>
@@ -142,6 +170,12 @@ require __DIR__ . '/includes/header.php';
       <span id="speed-label">2000 ms</span>
     </div>
     <div class="form-group">
+      <label>Hit Timing</label>
+      <input type="range" id="audio-offset" min="-150" max="150" step="5" value="0">
+      <span id="audio-offset-label">0 ms</span>
+      <span class="field-hint">If your hits register <strong>late</strong>, slide right; if early, slide left. Small nudges only — set too far and hits stop registering at all.</span>
+    </div>
+    <div class="form-group">
       <label>MIDI Device</label>
       <select id="midi-device-select"><option value="">No MIDI detected</option></select>
     </div>
@@ -154,13 +188,6 @@ require __DIR__ . '/includes/header.php';
       <input type="range" id="acoustic-sensitivity" min="1" max="10" step="1" value="5">
       <span id="acoustic-sensitivity-label">5</span>
       <span class="field-hint">Higher = detects softer hits (may cause false triggers)</span>
-    </div>
-    <div class="form-group">
-      <label>Hit Sound</label>
-      <label class="toggle">
-        <input type="checkbox" id="hit-sound-toggle" checked>
-        <span class="toggle-slider"></span>
-      </label>
     </div>
     <button id="close-settings" class="btn btn-primary">Done</button>
   </div>
@@ -186,12 +213,27 @@ require __DIR__ . '/includes/header.php';
       <span id="hud-title"></span>
     </div>
     <div class="hud-right">
-      <button id="btn-pause" class="btn btn-ghost btn-sm">⏸ Pause</button>
+      <button id="btn-record" class="btn btn-ghost btn-sm" title="Record this play and save it to your computer"><i class="ti ti-video" aria-hidden="true"></i> Record</button>
+      <button id="btn-pause" class="btn btn-ghost btn-sm"><i class="ti ti-player-pause" aria-hidden="true"></i> Pause</button>
       <button id="btn-fullscreen-exit" class="btn btn-exit btn-sm" title="Exit game">✕ Exit</button>
     </div>
   </div>
-  <canvas id="game-canvas"></canvas>
-  <div id="judgment-popup" class="judgment-popup"></div>
+  <div id="record-tip" class="record-tip" hidden>Saved as .webm — use any free video converter to get .mp4 for Instagram/TikTok/etc.</div>
+  <div id="tutorial-banner" class="tutorial-banner" hidden></div>
+  <div class="game-body">
+    <div class="canvas-wrap">
+      <canvas id="game-canvas"></canvas>
+      <div id="judgment-popup" class="judgment-popup"></div>
+    </div>
+    <div class="side-panel" id="side-panel">
+      <!-- YouTube casual-mode player fills this panel when a song has a video.
+           The IFrame API replaces #yt-player with an <iframe>. -->
+      <div id="yt-stage" class="yt-stage"><div id="yt-player"></div></div>
+      <div id="yt-loading" class="yt-loading" hidden>
+        Loading video… <span>a YouTube ad may play first — the song starts right after</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="screen-pause" class="screen">
@@ -221,11 +263,20 @@ require __DIR__ . '/includes/header.php';
   </div>
 </div>
 
-<button id="btn-settings" class="fab-settings" title="Settings">⚙️</button>
+<button id="btn-settings" class="fab-settings" title="Settings" aria-label="Settings"><i class="ti ti-settings" aria-hidden="true"></i></button>
 
 <div id="game-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" hidden></div>
 <?php if (!empty($_GET['test'])): ?>
-<div id="drum-test-config" hidden></div>
+<div id="drum-test-config" data-pad="<?= !empty($_GET['pad']) ? '1' : '0' ?>" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260716"></script>
+<?php if (!empty($_GET['plan'])): ?>
+<div id="plan-config" data-session="<?= (int) $_GET['plan'] ?>" hidden></div>
+<?php endif; ?>
+<?php if (!empty($_GET['tutorial'])): ?>
+<div id="tutorial-config" hidden></div>
+<?php endif; ?>
+<?php if (($user['email'] ?? '') === 'bongalcasid+keytest@gmail.com'): ?>
+<div id="keyboard-test-config" hidden></div>
+<?php endif; ?>
+<script type="module" src="/assets/js/game/main.js?v=20260814"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

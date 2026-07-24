@@ -19,6 +19,17 @@ try {
     $tests = $st->fetchAll();
 } catch (\Throwable $e) { /* table may not exist yet */ }
 
+// First-timers get a short interactive tutorial (kick/snare/hi-hat/crash/tom)
+// before the real test; returning students skip straight to it. Inert until
+// migrate-tutorial.sql has run (a missing column is treated as "not seen").
+$tutorialDone = true;
+try {
+    $st = db()->prepare('SELECT tutorial_completed FROM students WHERE user_id = ? LIMIT 1');
+    $st->execute([(int) $user['id']]);
+    $row = $st->fetch();
+    $tutorialDone = !$row || (int) ($row['tutorial_completed'] ?? 1) === 1;
+} catch (\Throwable $e) { /* column not migrated yet — don't gate */ }
+
 $pageTitle = 'Drum Placement Test — ' . SITE_NAME;
 $pageCss   = ['main'];
 $showNav   = true;
@@ -35,19 +46,31 @@ require __DIR__ . '/includes/header.php';
   .ai-feedback-body p { margin: .4rem 0; }
   .ai-feedback-body ul { margin: .25rem 0 .5rem 1.1rem; }
   .pt-empty { opacity: .75; }
+  .pt-start { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
 </style>
 <div class="pt-wrap">
   <?php $hasTaken = !empty($tests); ?>
   <div class="pt-hero">
-    <h1>🥁 Drum Placement Test</h1>
+    <h1><i class="ti ti-music" aria-hidden="true"></i> Drum Placement Test</h1>
     <?php if ($hasTaken): ?>
       <p class="auth-sub">Here's your latest result and Coach Zach's feedback below.
         Re-take it anytime to see how much you've improved.</p>
-      <a class="btn btn-primary btn-lg" href="/game.php?test=1">Re-take Test</a>
     <?php else: ?>
       <p class="auth-sub">Play one short standardized exercise. We'll analyze your timing and accuracy
-        and give you personalized AI coaching on what to work on next.</p>
-      <a class="btn btn-primary btn-lg" href="/game.php?test=1">Start Placement Test</a>
+        and give you personalized AI coaching on what to work on next. Pick how you'll play —
+        this also shapes your practice plan.</p>
+    <?php endif; ?>
+    <?php // Tutorial teaches 5 distinct kit pieces — only meaningful on a full kit;
+          // a single practice pad can't tell those drums apart, so that path
+          // always goes straight to its own (already single-lane) exercise. ?>
+    <?php $startKit = ($hasTaken || $tutorialDone) ? '/game.php?test=1' : '/game.php?tutorial=1'; ?>
+    <div class="pt-start">
+      <a class="btn btn-primary btn-lg" href="<?= htmlspecialchars($startKit) ?>"><i class="ti ti-music" aria-hidden="true"></i> <?= $hasTaken ? 'Re-take on a full kit' : 'Full drum kit' ?></a>
+      <a class="btn btn-ghost btn-lg" href="/game.php?test=1&amp;pad=1"><i class="ti ti-target" aria-hidden="true"></i> <?= $hasTaken ? 'Re-take on a practice pad' : 'Practice pad' ?></a>
+    </div>
+    <p class="pt-meta" style="margin-top:.5rem">A practice pad? You'll get a single-pad plan focused on timing &amp; rudiments.</p>
+    <?php if (!$hasTaken && $tutorialDone): ?>
+      <p class="pt-meta"><a href="/game.php?tutorial=1"><i class="ti ti-refresh" aria-hidden="true"></i> Replay the tutorial</a></p>
     <?php endif; ?>
   </div>
 

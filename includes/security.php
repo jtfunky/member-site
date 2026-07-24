@@ -2,6 +2,9 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/config.php';
 
+// Off unless explicitly enabled in config.php — prevents accidental lockout.
+if (!defined('ADMIN_DEVICE_LOCK')) define('ADMIN_DEVICE_LOCK', false);
+
 // ── CSRF ──────────────────────────────────────────────────
 
 function csrfToken(): string {
@@ -238,4 +241,81 @@ function checkAdminIp(): void {
         http_response_code(403);
         die('Access denied.');
     }
+}
+
+// ── Admin trusted devices ─────────────────────────────────
+const ADMIN_DEVICE_COOKIE = 'admin_device';
+
+function adminDeviceCookieToken(): string {
+    return (string) ($_COOKIE[ADMIN_DEVICE_COOKIE] ?? '');
+}
+
+// Is the current browser a registered device for this admin? Updates last_used_at.
+function adminDeviceTrusted(int $userId): bool {
+    $tok = adminDeviceCookieToken();
+    if ($tok === '') return false;
+    try {
+        $st = db()->prepare('SELECT id FROM admin_devices WHERE user_id = ? AND token_hash = ? LIMIT 1');
+        $st->execute([$userId, hash('sha256', $tok)]);
+        $id = (int) ($st->fetchColumn() ?: 0);
+        if ($id) {
+            db()->prepare('UPDATE admin_devices SET last_used_at = NOW(), ip = ? WHERE id = ?')
+                ->execute([getClientIp(), $id]);
+            return true;
+        }
+    } catch (\Throwable $e) { /* table missing → treat as untrusted */ }
+    return false;
+}
+
+// A short, human label for the current browser (for the devices list).
+function adminDeviceLabel(): string {
+    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $os = 'Unknown OS';
+    foreach (['Windows' => 'Windows', 'Mac OS' => 'macOS', 'Macintosh' => 'macOS', 'Android' => 'Android', 'iPhone' => 'iPhone', 'iPad' => 'iPad', 'Linux' => 'Linux'] as $needle => $name) {
+        if (stripos($ua, $needle) !== false) { $os = $name; break; }
+    }
+    $br = 'browser';
+    foreach (['Edg' => 'Edge', 'OPR' => 'Opera', 'Chrome' => 'Chrome', 'Firefox' => 'Firefox', 'Safari' => 'Safari'] as $needle => $name) {
+        if (stripos($ua, $needle) !== false) { $br = $name; break; }
+    }
+    return $br . ' on ' . $os;
+}
+
+// Trust the current browser: store a new token (hashed) + set the long-lived cookie.
+function registerAdminDevice(int $userId): void {
+    $tok = bin2hex(random_bytes(32));
+    db()->prepare('INSERT INTO admin_devices (user_id, token_hash, label, ip, last_used_at) VALUES (?, ?, ?, ?, NOW())')
+        ->execute([$userId, hash('sha256', $tok), adminDeviceLabel(), getClientIp()]);
+    setcookie(ADMIN_DEVICE_COOKIE, $tok, [
+        'expires'  => time() + 90 * 86400,
+        'path'     => '/',
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    $_COOKIE[ADMIN_DEVICE_COOKIE] = $tok; // available immediately this request
+}
+
+function listAdminDevices(int $userId): array {
+    try {
+        $st = db()->prepare('SELECT * FROM admin_devices WHERE user_id = ? ORDER BY last_used_at DESC, created_at DESC');
+        $st->execute([$userId]);
+        return $st->fetchAll();
+    } catch (\Throwable $e) { return []; }
+}
+
+// True if a device row belongs to the CURRENT browser (used to mark "this device").
+function isCurrentAdminDevice(array $device): bool {
+    $tok = adminDeviceCookieToken();
+    return $tok !== '' && hash_equals((string) $device['token_hash'], hash('sha256', $tok));
+}
+
+function revokeAdminDevice(int $userId, int $deviceId): void {
+    db()->prepare('DELETE FROM admin_devices WHERE id = ? AND user_id = ?')->execute([$deviceId, $userId]);
+}
+
+// Remove every device for this admin except the current browser's.
+function revokeOtherAdminDevices(int $userId): void {
+    $keep = hash('sha256', adminDeviceCookieToken());
+    db()->prepare('DELETE FROM admin_devices WHERE user_id = ? AND token_hash <> ?')->execute([$userId, $keep]);
 }

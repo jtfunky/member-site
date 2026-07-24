@@ -20,16 +20,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $first    = trim($_POST['first_name'] ?? '');
         $last     = trim($_POST['last_name']  ?? '');
 
+        $role   = in_array($_POST['role'] ?? 'admin', ['admin', 'editor', 'partner'], true) ? $_POST['role'] : 'admin';
         $result = registerUser($username, $email, $password, $first, $last);
         if (is_int($result)) {
-            // Accounts created here are administrators (full access, no expiry).
+            // Staff accounts created here have full/scoped access, no expiry.
             $db->prepare(
-                'UPDATE users SET role="admin", registration_type="admin",
+                'UPDATE users SET role=?, registration_type="admin",
                  subscription_status="active", access_expires_at=NULL WHERE id=?'
-            )->execute([$result]);
-            $message = "Administrator {$username} created. Temp password: {$password}";
+            )->execute([$role, $result]);
+            $message = ucfirst($role) . " account {$username} created. Temp password: {$password}";
         } else {
             $error = $result;
+        }
+
+    } elseif ($action === 'set_role') {
+        $userId  = (int) ($_POST['user_id'] ?? 0);
+        $newRole = in_array($_POST['role'] ?? '', ['admin', 'editor', 'partner'], true) ? $_POST['role'] : '';
+        if ($userId === (int) $admin['id']) {
+            $error = 'You cannot change your own role.';
+        } elseif ($newRole) {
+            $db->prepare('UPDATE users SET role=? WHERE id=?')->execute([$newRole, $userId]);
+            $message = 'Role updated to ' . $newRole . '.';
         }
 
     } elseif ($action === 'grant') {
@@ -77,7 +88,7 @@ if ($editId) {
 
     // users.php manages administrators only. A member account is managed on the
     // Students page, so route there instead of showing it here.
-    if ($editUser && ($editUser['role'] ?? '') !== 'admin') {
+    if ($editUser && !in_array($editUser['role'] ?? '', ['admin', 'editor', 'partner'], true)) {
         header('Location: ' . SITE_URL . '/admin/students.php?q=' . urlencode($editUser['email']));
         exit;
     }
@@ -104,7 +115,7 @@ if ($editId) {
 $users = $db->query(
     'SELECT id, username, email, first_name, last_name, role, subscription_status,
      access_expires_at, is_active, registration_type, country, created_at
-     FROM users WHERE role = "admin" ORDER BY created_at DESC'
+     FROM users WHERE role IN ("admin","editor","partner") ORDER BY created_at DESC'
 )->fetchAll();
 
 $pageTitle = 'Users — Admin';
@@ -119,19 +130,21 @@ require __DIR__ . '/../includes/header.php';
   <div class="admin-nav-pills">
     <a href="/admin/">Overview</a>
     <a href="/admin/users.php" class="active">Users</a>
+    <a href="/admin/devices.php">My Devices</a>
     <a href="/admin/students.php">Students</a>
     <a href="/admin/sessions.php">Sessions</a>
     <a href="/admin/songs.php">Songs</a>
     <a href="/admin/placement-tests.php">Placement Tests</a>
+    <a href="/admin/investor-agreement.php">Investor Agreement</a>
   </div>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
 <?php if ($error):   ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
-<!-- Create Administrator -->
+<!-- Create Staff Account -->
 <details class="collapsible" <?= $error && isset($_POST['action']) && $_POST['action'] === 'create' ? 'open' : '' ?>>
-  <summary class="btn btn-primary">+ Create Administrator</summary>
+  <summary class="btn btn-primary">+ Create Staff Account</summary>
   <form method="POST" class="inline-form">
     <?= csrfField() ?>
     <input type="hidden" name="action" value="create">
@@ -145,12 +158,20 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label>Role *</label>
+        <select name="role">
+          <option value="admin">Admin — full access</option>
+          <option value="editor">Editor — Song Tags / Requests / Chart Editor</option>
+          <option value="partner">Partner — Partner page only</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Temporary Password</label>
         <input type="text" name="password" value="TempPass@123" required>
-        <span class="field-hint">Admin should change this after login.</span>
+        <span class="field-hint">They should change this after login.</span>
       </div>
     </div>
-    <button type="submit" class="btn btn-primary">Create Administrator</button>
+    <button type="submit" class="btn btn-primary">Create Account</button>
   </form>
 </details>
 
@@ -169,6 +190,7 @@ require __DIR__ . '/../includes/header.php';
       <p><strong>Name:</strong> <?= htmlspecialchars($editUser['first_name'] . ' ' . $editUser['last_name']) ?></p>
       <p><strong>Joined:</strong> <?= date('M j, Y', strtotime($editUser['created_at'])) ?></p>
       <p><strong>Type:</strong> <?= $editUser['registration_type'] ?></p>
+      <p><strong>Role:</strong> <?= htmlspecialchars($editUser['role']) ?></p>
       <p><strong>Access Expires:</strong> <?= $editUser['access_expires_at'] ? date('M j, Y H:i', strtotime($editUser['access_expires_at'])) : 'None' ?></p>
       <p><strong>Active:</strong> <?= $editUser['is_active'] ? 'Yes' : 'No' ?></p>
     </div>
@@ -199,6 +221,22 @@ require __DIR__ . '/../includes/header.php';
         <input type="text" name="new_password" placeholder="New password (min 8 chars)" required>
         <button type="submit" class="btn btn-secondary btn-sm">Set Password</button>
       </form>
+
+      <!-- Change Role -->
+      <?php if ((int) $editUser['id'] !== (int) $admin['id']): ?>
+      <form method="POST" class="mini-form">
+        <?= csrfField() ?>
+        <input type="hidden" name="action"  value="set_role">
+        <input type="hidden" name="user_id" value="<?= $editUser['id'] ?>">
+        <h3>Change Role</h3>
+        <select name="role">
+          <option value="admin"   <?= $editUser['role'] === 'admin'   ? 'selected' : '' ?>>Admin</option>
+          <option value="editor"  <?= $editUser['role'] === 'editor'  ? 'selected' : '' ?>>Editor</option>
+          <option value="partner" <?= $editUser['role'] === 'partner' ? 'selected' : '' ?>>Partner</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Update Role</button>
+      </form>
+      <?php endif; ?>
 
       <!-- Activate / Deactivate -->
       <form method="POST" class="mini-form">
@@ -253,28 +291,29 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- Users Table -->
-<h2>Administrators</h2>
+<!-- Staff Table -->
+<h2>Staff Accounts</h2>
 <div class="table-scroll">
 <table class="data-table">
   <thead>
-    <tr><th>User</th><th>Email</th><th>Country</th><th>Type</th><th>Status</th><th>Expires</th><th>Active</th><th></th></tr>
+    <tr><th>User</th><th>Role</th><th>Email</th><th>Country</th><th>Type</th><th>Status</th><th>Expires</th><th>Active</th><th></th></tr>
   </thead>
   <tbody>
   <?php foreach ($users as $u): ?>
     <?php $isExpired = $u['access_expires_at'] && strtotime($u['access_expires_at']) < time(); ?>
     <tr class="<?= !$u['is_active'] ? 'row-inactive' : '' ?>">
       <td><?= htmlspecialchars($u['username']) ?></td>
+      <td><span class="badge"><?= htmlspecialchars($u['role']) ?></span></td>
       <td><?= htmlspecialchars($u['email']) ?></td>
       <td><?= !empty($u['country']) ? htmlspecialchars($u['country']) : '—' ?></td>
-      <td><?= $u['registration_type'] === 'admin' ? '👤 Admin-added' : '🌐 Self-reg' ?></td>
+      <td><?= $u['registration_type'] === 'admin' ? '<i class="ti ti-user"></i> Admin-added' : '<i class="ti ti-world"></i> Self-reg' ?></td>
       <td>
         <span class="badge badge-<?= $isExpired ? 'expired' : $u['subscription_status'] ?>">
           <?= $isExpired ? 'expired' : $u['subscription_status'] ?>
         </span>
       </td>
       <td><?= $u['access_expires_at'] ? date('M j, Y', strtotime($u['access_expires_at'])) : '—' ?></td>
-      <td><?= $u['is_active'] ? '✅' : '❌' ?></td>
+      <td><?= $u['is_active'] ? '<i class="ti ti-check" style="color:var(--success)"></i>' : '<i class="ti ti-x" style="color:var(--danger)"></i>' ?></td>
       <td><a href="/admin/users.php?edit=<?= $u['id'] ?>" class="btn btn-ghost btn-xs">Manage</a></td>
     </tr>
   <?php endforeach; ?>

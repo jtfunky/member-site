@@ -237,6 +237,14 @@ function oauthCreateUser(string $key, array $profile): int {
     ensureWebAccessStudent($userId);
     captureStudentCountry($profile['email'] ?? '');
 
+    if (function_exists('notifySignup')) {
+        notifySignup('New user registered',
+            'A new account was just created on ' . SITE_NAME . ' via ' . ucfirst($key) . " login:\n\n"
+            . 'Name: ' . trim(($profile['first'] ?? '') . ' ' . ($profile['last'] ?? '')) . "\n"
+            . 'Email: ' . ($profile['email'] ?? '—') . "\n\n"
+            . 'Manage students: ' . SITE_URL . '/admin/students.php');
+    }
+
     return $userId;
 }
 

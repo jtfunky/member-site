@@ -45,10 +45,46 @@ function requireLogin(string $redirect = '/login.php'): array {
 function requireAdmin(): array {
     $user = requireLogin();
     if ($user['role'] !== 'admin') {
-        header('Location: ' . SITE_URL . '/dashboard.php');
+        header('Location: ' . SITE_URL . roleHome($user['role'] ?? 'user'));
         exit;
     }
     checkAdminIp();
+
+    // Device lock: admins may only reach the admin area from a registered device.
+    if (ADMIN_DEVICE_LOCK) {
+        sessionStart();
+        if (empty($_SESSION['admin_device_ok'])) {
+            if (adminDeviceTrusted((int) $user['id'])) {
+                $_SESSION['admin_device_ok'] = true;
+            } else {
+                header('Location: ' . SITE_URL . '/verify-device.php?next=' . urlencode($_SERVER['REQUEST_URI'] ?? '/admin/'));
+                exit;
+            }
+        }
+    }
+    return $user;
+}
+
+// The landing page each role belongs on — used for post-login routing and for
+// bouncing a role away from a page it isn't allowed to see.
+function roleHome(string $role): string {
+    switch ($role) {
+        case 'admin':   return '/admin/';
+        case 'editor':  return '/admin/song-requests.php';
+        case 'partner': return '/partner.php';
+        default:        return '/dashboard.php';
+    }
+}
+
+// Require the logged-in user to hold one of $roles; otherwise send them to their
+// own home. Server-side gate for scoped staff roles (editor/partner) — every
+// role-restricted page must call this (nav hiding is cosmetic only).
+function requireRoles(array $roles): array {
+    $user = requireLogin();
+    if (!in_array($user['role'] ?? 'user', $roles, true)) {
+        header('Location: ' . SITE_URL . roleHome($user['role'] ?? 'user'));
+        exit;
+    }
     return $user;
 }
 

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_name           VARCHAR(50)  DEFAULT '',
   avatar              VARCHAR(255) DEFAULT '',
   bio                 TEXT         DEFAULT '',
-  role                ENUM('user','admin') DEFAULT 'user',
+  role                ENUM('user','admin','editor','partner') DEFAULT 'user',
   registration_type   ENUM('self','admin') DEFAULT 'self',
   subscription_status ENUM('trial','active','cancelled','expired','pending') DEFAULT 'trial',
   access_expires_at   DATETIME     NULL,
@@ -68,12 +68,76 @@ CREATE TABLE IF NOT EXISTS songs (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   title           VARCHAR(200) NOT NULL,
   artist          VARCHAR(200) DEFAULT '',
+  category        VARCHAR(20)  NOT NULL DEFAULT 'kit',
   bpm             DECIMAL(5,2) DEFAULT 120,
   duration_ms     INT          DEFAULT 0,
   notes           JSON,
   audio_filename  VARCHAR(255) DEFAULT '',
+  youtube_url     VARCHAR(255) DEFAULT NULL,
+  visibility      VARCHAR(12)  NOT NULL DEFAULT 'public',
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS song_tags (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(60)  NOT NULL,
+  tag_group  VARCHAR(20)  NOT NULL DEFAULT 'genre',
+  parent_id  INT          NULL,
+  sort_order INT          NOT NULL DEFAULT 0,
+  created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_group_name (tag_group, name),
+  INDEX idx_parent (parent_id),
+  FOREIGN KEY (parent_id) REFERENCES song_tags(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS song_tag_map (
+  song_id INT NOT NULL,
+  tag_id  INT NOT NULL,
+  PRIMARY KEY (song_id, tag_id),
+  INDEX idx_tag (tag_id),
+  FOREIGN KEY (song_id) REFERENCES songs(id)     ON DELETE CASCADE,
+  FOREIGN KEY (tag_id)  REFERENCES song_tags(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS song_requests (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  user_id        INT NOT NULL,
+  youtube_url    VARCHAR(255) NOT NULL,
+  yt_id          VARCHAR(20)  NOT NULL,
+  title          VARCHAR(200) DEFAULT '',
+  note           VARCHAR(500) DEFAULT '',
+  status         VARCHAR(20)  NOT NULL DEFAULT 'pending',
+  decline_reason VARCHAR(255) DEFAULT '',
+  price          DECIMAL(10,2) NOT NULL DEFAULT 0,
+  currency       CHAR(3)      NOT NULL DEFAULT 'PHP',
+  song_id        INT NULL,
+  paid_at        DATETIME NULL,
+  created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user   (user_id),
+  INDEX idx_ytid   (yt_id),
+  INDEX idx_status (status),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS song_entitlements (
+  user_id    INT NOT NULL,
+  song_id    INT NOT NULL,
+  source     VARCHAR(20) NOT NULL DEFAULT 'request',
+  granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, song_id),
+  INDEX idx_song (song_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
@@ -102,6 +166,7 @@ $pdo->exec("
 CREATE TABLE IF NOT EXISTS practice_plans (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   user_id      INT NOT NULL,
+  mode         VARCHAR(10) NOT NULL DEFAULT 'kit',
   drum_test_id INT NULL,
   intro        TEXT,
   generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -117,10 +182,28 @@ CREATE TABLE IF NOT EXISTS plan_sessions (
   title        VARCHAR(200) NOT NULL DEFAULT '',
   focus        VARCHAR(255) NOT NULL DEFAULT '',
   drills       TEXT,
+  chart        JSON         NULL,
+  bpm          INT          NOT NULL DEFAULT 90,
+  best_accuracy DECIMAL(5,2) NOT NULL DEFAULT 0,
   completed    TINYINT(1)   NOT NULL DEFAULT 0,
   completed_at DATETIME     NULL,
   UNIQUE KEY uniq_plan_session (plan_id, session_no),
   INDEX idx_plan (plan_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+$pdo->exec("
+CREATE TABLE IF NOT EXISTS admin_devices (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT          NOT NULL,
+  token_hash   CHAR(64)     NOT NULL,
+  label        VARCHAR(160) DEFAULT '',
+  ip           VARCHAR(45)  DEFAULT '',
+  created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  last_used_at DATETIME     NULL,
+  UNIQUE KEY uniq_token (token_hash),
+  INDEX idx_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 

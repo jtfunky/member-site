@@ -110,6 +110,7 @@ require __DIR__ . '/../includes/header.php';
     <a href="/admin/sessions.php" class="active">Sessions</a>
     <a href="/admin/songs.php">Songs</a>
     <a href="/admin/placement-tests.php">Placement Tests</a>
+    <a href="/admin/investor-agreement.php">Investor Agreement</a>
   </div>
 </div>
 

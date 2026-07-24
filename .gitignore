@@ -1,13 +1,16 @@
 # Secrets — NEVER commit (DB password + API keys live here)
 includes/config.php
+includes/config.local.php
 
 # User uploads (proof / audio / avatar files) — user data, not code
 uploads/audio/*
 uploads/avatars/*
 uploads/proofs/*
+uploads/investor-proofs/*
 !uploads/audio/.htaccess
 !uploads/avatars/.htaccess
 !uploads/proofs/.htaccess
+!uploads/investor-proofs/.htaccess
 
 # Diagnostics / temp probes
 _opcache-check.php

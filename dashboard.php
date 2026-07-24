@@ -71,21 +71,21 @@ require __DIR__ . '/includes/header.php';
 <div class="tile-grid">
 
   <a href="<?= $hasAccess ? '/game.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
-    <div class="tile-icon">🥁</div>
+    <div class="tile-icon"><i class="ti ti-player-play" aria-hidden="true"></i></div>
     <h3>Drum Game</h3>
     <p>Play songs with your e-drum kit or acoustic drums</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
   </a>
 
   <a href="<?= $hasAccess ? '/profile.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
-    <div class="tile-icon">👤</div>
+    <div class="tile-icon"><i class="ti ti-user" aria-hidden="true"></i></div>
     <h3>My Profile</h3>
     <p>Edit your name, avatar, and bio</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
   </a>
 
   <a href="<?= $hasAccess ? '/exclusive/' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
-    <div class="tile-icon">⭐</div>
+    <div class="tile-icon"><i class="ti ti-star" aria-hidden="true"></i></div>
     <h3>Exclusive Content</h3>
     <p>Member-only lessons and resources</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
@@ -93,7 +93,7 @@ require __DIR__ . '/includes/header.php';
 
   <?php if ($hasAccess && $hasSessions): ?>
   <a href="/my-sessions.php" class="tile">
-    <div class="tile-icon">📅</div>
+    <div class="tile-icon"><i class="ti ti-calendar" aria-hidden="true"></i></div>
     <h3>My Sessions</h3>
     <p>Book and manage your one-on-one sessions<?php
       $cr = (int) ($student['session_credits'] ?? 0);
@@ -104,7 +104,7 @@ require __DIR__ . '/includes/header.php';
 
   <?php if (!$hasAccess || $days <= CANCEL_WINDOW_DAYS): ?>
   <a href="/payment.php" class="tile tile--cta">
-    <div class="tile-icon">💳</div>
+    <div class="tile-icon"><i class="ti ti-credit-card" aria-hidden="true"></i></div>
     <h3><?= $hasAccess ? 'Manage Membership' : 'Activate Membership' ?></h3>
     <p><?= $price ?>/month · Cancel anytime</p>
   </a>
@@ -114,7 +114,7 @@ require __DIR__ . '/includes/header.php';
 
 <?php if ($user['role'] === 'admin'): ?>
 <div class="admin-shortcut">
-  <a href="/admin/" class="btn btn-secondary">⚙️ Admin Panel</a>
+  <a href="/admin/" class="btn btn-secondary"><i class="ti ti-settings" aria-hidden="true"></i> Admin Panel</a>
 </div>
 <?php endif; ?>
 

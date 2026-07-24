@@ -38,8 +38,8 @@ export function selectInput(portId, callback) {
     const [status, note, velocity] = event.data;
     const type    = status & 0xF0;
     const channel = status & 0x0F;
-    // Note On with velocity > 0
-    if (type === 0x90 && velocity > 0) {
+    // Note On with velocity > 0 (guarded so a missing callback can never throw)
+    if (type === 0x90 && velocity > 0 && onMessageCallback) {
       onMessageCallback({ note, velocity, timestamp: event.timeStamp, channel });
     }
   };

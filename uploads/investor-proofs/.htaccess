@@ -1,0 +1,15 @@
+# Block execution/serving of any script files in this upload folder.
+# Proof files (jpg/png/gif/webp/pdf) are still served normally.
+<FilesMatch "\.(php|php\d|phtml|phps|phar|cgi|pl|py|asp|aspx|sh)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+# Belt-and-suspenders: disable the PHP engine in this directory if the host honors it.
+<IfModule mod_php.c>
+  php_admin_flag engine off
+</IfModule>

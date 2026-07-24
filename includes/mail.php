@@ -30,3 +30,20 @@ function adminEmails(): array {
 function notifyAdmins(string $subject, string $body): void {
     foreach (adminEmails() as $to) sendMail($to, $subject, $body);
 }
+
+// Extra recipients (comma-separated in config NOTIFY_CC) who should also receive
+// new-signup notifications without needing an admin account.
+if (!defined('NOTIFY_CC')) define('NOTIFY_CC', '');
+
+function signupCcEmails(): array {
+    return array_values(array_filter(
+        array_map('trim', explode(',', NOTIFY_CC)),
+        fn($e) => filter_var($e, FILTER_VALIDATE_EMAIL)
+    ));
+}
+
+// New-registration/enrollment notification: all active admins + the NOTIFY_CC list.
+function notifySignup(string $subject, string $body): void {
+    notifyAdmins($subject, $body);
+    foreach (signupCcEmails() as $to) sendMail($to, $subject, $body);
+}

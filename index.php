@@ -16,6 +16,8 @@ $bodyClass = 'landing';
 require __DIR__ . '/includes/header.php';
 ?>
 
+<noscript><style>.reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
+
 <!-- Ambient callback to the game's note highway — same 10 lane colors from
      input.js getLaneColors(), drifting subtly behind the page. Hidden behind
      the opaque hero, only visible in the plainer sections below it. -->
@@ -60,7 +62,7 @@ require __DIR__ . '/includes/header.php';
     <span class="note" style="left:94%; width:26px; animation-duration:12s; animation-delay:-6s;"></span>
   </div>
   <div class="hero-inner">
-    <div class="hero-text">
+    <div class="hero-text reveal">
       <h1>Play Drums.<br>Easy and Fun.</h1>
       <p class="hero-sub">A browser-based rhythm game that works with your electronic drum kit or acoustic drums. No download needed.</p>
       <a href="/register.php" class="btn btn-primary btn-lg">Start Free Trial — Signup Now!</a>
@@ -71,22 +73,22 @@ require __DIR__ . '/includes/header.php';
 <section class="features">
   <div class="container">
     <div class="feature-grid">
-      <div class="feature-card feature-card--amber">
+      <div class="feature-card feature-card--amber reveal">
         <div class="feature-icon"><i class="ti ti-usb" aria-hidden="true"></i></div>
         <h3>E-Drum Support</h3>
         <p>Connect any electronic drum kit via USB MIDI. All 8 pads mapped out of the box.</p>
       </div>
-      <div class="feature-card feature-card--red">
+      <div class="feature-card feature-card--red reveal">
         <div class="feature-icon"><i class="ti ti-playlist" aria-hidden="true"></i></div>
         <h3>New Songs Every Week</h3>
         <p>Play along with your favorite songs and exercises.</p>
       </div>
-      <div class="feature-card feature-card--gold">
+      <div class="feature-card feature-card--gold reveal">
         <div class="feature-icon"><i class="ti ti-star" aria-hidden="true"></i></div>
         <h3>Score &amp; Improve</h3>
         <p>Track your PERFECT / GOOD / MISS accuracy and grade on every song.</p>
       </div>
-      <div class="feature-card feature-card--blue">
+      <div class="feature-card feature-card--blue reveal">
         <div class="feature-icon"><i class="ti ti-world" aria-hidden="true"></i></div>
         <h3>Play Anywhere</h3>
         <p>Works in Chrome and Edge on any device. No install, no plugins.</p>
@@ -97,8 +99,8 @@ require __DIR__ . '/includes/header.php';
 
 <section class="pricing">
   <div class="container">
-    <h2>Simple Pricing</h2>
-    <div class="price-card">
+    <h2 class="reveal">Simple Pricing</h2>
+    <div class="price-card reveal">
       <div class="price-amount"><?= $price ?><span>/month</span></div>
       <ul class="price-features">
         <li><i class="ti ti-check" aria-hidden="true"></i> Full drum game access</li>
@@ -116,4 +118,5 @@ require __DIR__ . '/includes/header.php';
   <p>&copy; <?= date('Y') ?> <?= SITE_NAME ?>. All rights reserved.</p>
 </footer>
 
+<script src="/assets/js/landing.js?v=20260717"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

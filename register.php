@@ -26,6 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (is_int($result)) {
                 require_once __DIR__ . '/includes/programs.php';
                 ensureWebAccessStudent($result); // track this account as a Website-access student
+                notifySignup('New user registered',
+                    'A new account was just created on ' . SITE_NAME . ":\n\n"
+                    . 'Name: ' . trim($first . ' ' . $last) . "\nEmail: {$email}\n\n"
+                    . 'Manage students: ' . SITE_URL . '/admin/students.php');
                 // Auto-login
                 loginUser($email, $password);
                 header('Location: ' . SITE_URL . '/dashboard.php?welcome=1');

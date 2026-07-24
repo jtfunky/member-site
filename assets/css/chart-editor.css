@@ -7,7 +7,7 @@
   --border:  #2a2a38;
   --text:    #e8e8f0;
   --dim:     #7a7a9a;
-  --accent:  #7c6af5;
+  --accent:  #8b5cf6;
   --success: #22c55e;
   --danger:  #ef4444;
   --radius:  8px;
@@ -108,7 +108,7 @@ body { background: var(--bg); color: var(--text); display: flex; flex-direction:
 }
 .midi-btn:hover { border-color: var(--accent); }
 .midi-btn.off { opacity: .55; }
-.midi-btn.on  { border-color: var(--accent); color: var(--accent); background: rgba(124,106,245,.12); }
+.midi-btn.on  { border-color: var(--accent); color: var(--accent); background: rgba(139,92,246,.12); }
 
 /* ── MIDI pad-mapping panel ── */
 .midi-map-panel { background: var(--bg2); border-bottom: 1px solid var(--border); padding: .6rem 1rem; flex-shrink: 0; }

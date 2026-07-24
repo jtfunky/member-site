@@ -54,4 +54,19 @@
     const label = document.querySelector('.plan-progress');
     if (label) label.childNodes[0].textContent = `Progress: ${done} / ${all.length} sessions this month`;
   }
+
+  // ── Pre-generate session charts in the background ─────────
+  // One request generates+caches one session; loop until all are ready so each
+  // session plays instantly. Fire-and-forget; silent on any failure.
+  if (document.querySelector('.plan-session')) {
+    (async () => {
+      for (let i = 0; i < 12; i++) {
+        let d;
+        try { d = await (await fetch('/api/plan-warm.php')).json(); }
+        catch (e) { break; }
+        if (!d || d.done) break;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    })();
+  }
 })();

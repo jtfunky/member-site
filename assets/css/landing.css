@@ -1,11 +1,12 @@
 /* Falling notes — ambient callback to the game's note highway, same 10 lane
-   colors. Fixed + first in DOM so it paints behind the opaque hero and only
-   shows through the plain sections below; transform-only animation (no
-   background-position loop) per the ui-ux-pro-max performance guideline. Low
-   opacity and slow so it reads as atmosphere, not gameplay. */
+   colors. Fixed, z-index 1 so it stays visible drifting over the now-fixed
+   hero photo (z-index 0) rather than getting hidden behind it. Transform-only
+   animation (no background-position loop) per the ui-ux-pro-max performance
+   guideline. Low opacity and slow so it reads as atmosphere, not gameplay. */
 .falling-notes {
   position: fixed;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
   overflow: hidden;
 }
@@ -48,6 +49,19 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .hero-notes { display: none; }
+}
+
+/* Scroll-linked reveal: landing.js sets opacity/transform directly as a
+   function of each element's distance from the viewport's vertical center,
+   recalculated on every scroll frame — deliberately NO transition here, so
+   if the user stops scrolling mid-way the element freezes exactly at that
+   opacity instead of continuing to animate toward a target on its own. */
+.reveal {
+  opacity: 0;
+  transform: translateY(56px) scale(.94);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; }
 }
 
 /* Subtle film-grain texture over the whole page — cheap SVG noise, blended at
@@ -120,12 +134,18 @@
   font-family: "Righteous", "Poppins", -apple-system, sans-serif;
 }
 
-/* Nav */
+/* Nav — fixed so it stays visible the whole time the user scrolls, with a
+   frosted-glass backdrop since it now sits over constantly-changing content
+   (photo, cards, footer) instead of just the hero. */
 .landing .top-nav {
-  background: transparent;
-  border-bottom: none;
-  position: absolute;
+  background: rgba(14,14,23,.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  position: fixed;
+  top: 0;
   width: 100%;
+  z-index: 100;
 }
 .landing .nav-brand { font-size: 1.3rem; display: flex; align-items: center; }
 /* Global .nav-links is left-aligned (flex:1) to suit the logged-in nav's
@@ -141,9 +161,10 @@
 .landing .btn-primary { background: var(--photo-red); }
 .landing .btn-primary:hover { opacity: .9; }
 
-/* Hero — the photo *is* the hero: full-bleed background, tinted by the same
-   aurora glow used elsewhere so it reads as part of the theme, not a pasted-in
-   stock photo. Text sits on a scrim over the darker (left) side of the frame. */
+/* Hero — the photo *is* the page background: fixed/pinned so it stays put as
+   the user scrolls the rest of the content over it (not just confined to the
+   first screen), tinted by the same aurora glow used elsewhere so it reads as
+   part of the theme, not a pasted-in stock photo. */
 .hero {
   position: relative;
   overflow: hidden;
@@ -154,7 +175,10 @@
   padding: 6rem 1.5rem 4rem;
   background: var(--bg);
 }
-.hero-media { position: absolute; inset: 0; z-index: 0; }
+/* Fixed (not absolute) — pins the photo to the viewport for the whole page
+   instead of scrolling away with the hero section. z-index 0 is the base
+   layer everything else (falling notes, page content) stacks above. */
+.hero-media { position: fixed; inset: 0; z-index: 0; }
 .hero-media img {
   width: 100%;
   height: 100%;
@@ -168,24 +192,17 @@
 @media (max-width: 640px) {
   .hero-media img { object-position: 62% 15%; }
 }
-/* Scrim: below 900px the text column takes up too much of the frame's width
-   for a directional (left-only) darken to keep it legible, so use a uniform
-   wash there. From 900px up, a wide desktop canvas leaves enough room to
-   darken just the text side and let the photo read clearly on the right. */
+/* Scrim: now that the photo sits behind every section (not just the hero
+   text column), it needs to stay legible across the full width rather than
+   revealing brightly on one side — fairly dark everywhere, with a little
+   directional/bottom emphasis left over for depth. */
 .hero-media::after {
   content: '';
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to top, rgba(14,14,23,.6) 0%, transparent 40%),
-    rgba(14,14,23,.78);
-}
-@media (min-width: 900px) {
-  .hero-media::after {
-    background:
-      linear-gradient(100deg, rgba(14,14,23,.97) 0%, rgba(14,14,23,.92) 35%, rgba(14,14,23,.75) 55%, rgba(14,14,23,.4) 72%, rgba(14,14,23,.1) 88%),
-      linear-gradient(to top, rgba(14,14,23,.5) 0%, transparent 30%);
-  }
+    linear-gradient(100deg, rgba(14,14,23,.88) 0%, rgba(14,14,23,.8) 40%, rgba(14,14,23,.68) 100%),
+    linear-gradient(to top, rgba(14,14,23,.35) 0%, transparent 25%);
 }
 /* Aurora glow: a soft wash built from the photo's own warm amber/red/gold,
    plus a small pop of the guitar's blue for contrast — reinforces the photo's
@@ -240,8 +257,10 @@
   line-height: 1.7;
 }
 
-/* Features */
-.features { padding: 5rem 1.5rem; position: relative; }
+/* Features — z-index 2 so the cards render above the fixed photo (0) and
+   falling notes (1); section itself stays transparent so both remain
+   visible through the gaps around the cards. */
+.features { padding: 5rem 1.5rem 9rem; position: relative; z-index: 2; }
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -280,9 +299,14 @@
 .feature-card h3 { margin-bottom: .5rem; }
 .feature-card p  { color: var(--text-dim); font-size: .93rem; margin: 0; }
 
-/* Pricing */
+/* Pricing — same z-index 2 treatment as .features, for the same reason.
+   Bottom padding clears the now-fixed footer if this ever gets re-enabled
+   (it would then be the last section before the footer). */
 .pricing {
-  padding: 5rem 1.5rem;
+  display: none; /* disabled per user request 2026-07-17 — remove this line to re-enable */
+  position: relative;
+  z-index: 2;
+  padding: 5rem 1.5rem 9rem;
   text-align: center;
 }
 .pricing h2 { font-size: 2rem; margin-bottom: 2rem; }
@@ -325,3 +349,19 @@
   font-size: .95rem;
 }
 .price-features .ti { color: var(--success); margin-right: .4rem; }
+
+/* Footer — fixed to the bottom of the viewport like the nav, with a matching
+   frosted-glass backdrop. .features/.pricing carry extra bottom padding
+   (see above) so real content never sits underneath it. */
+.landing .site-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  margin-top: 0;
+  background: rgba(14,14,23,.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255,255,255,.08);
+  z-index: 100;
+}

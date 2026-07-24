@@ -19,12 +19,15 @@ PADS.forEach((p, i) => { KEY_MAP[p.keyCode] = i; });
 // ── State ────────────────────────────────────────────────────────────────────
 let notes         = [];        // { time, lane } sorted by time
 let selection     = new Set(); // selected note objects (multi-select; survives sorting)
+let clipboard     = [];        // copied hits as { time, lane }, relative to the earliest
 let latencyMs     = 0;         // subtracted from hit timestamp
 let quantizeMode  = 'none';    // 'none' | 'beat' | '8th' | '16th'
 let isRecording   = false;
 let rafId         = null;
 let audioReady    = false;
 let loadedFile    = null;      // the loaded audio File — uploaded to the library on save
+let ytPlayer      = null;      // YT.Player when a YouTube video is loaded for charting
+let ytReady       = false;     // that player is ready → transport routes to it
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const audioEl      = document.getElementById('audio');
@@ -107,8 +110,8 @@ audioEl.addEventListener('ended', () => {
 });
 
 seekBar.addEventListener('input', () => {
-  audioEl.currentTime = parseFloat(seekBar.value);
-  scheduledUpToMs = audioEl.currentTime * 1000;   // resync chart playback after scrub
+  transportSeekSec(parseFloat(seekBar.value));
+  scheduledUpToMs = curTimeSec() * 1000;   // resync chart playback after scrub
   drawTimeline();
 });
 
@@ -118,26 +121,25 @@ stopBtn.addEventListener('click', stopPlayback);
 recBtn.addEventListener('click', toggleRecord);
 
 function togglePlay() {
-  if (!audioReady) { showToast('Load an audio file first'); return; }
-  // If "Hear chart" is on, route the song through the context for tight sync.
-  // Either way, keep the context resumed so a routed song stays audible.
-  if (playbackEnabled) ensureSongRouting();
+  if (!transportReady()) { showToast('Load an audio file or a YouTube link first'); return; }
+  // "Hear chart" routing only applies to the uploaded <audio> element.
+  if (playbackEnabled && !usingYouTube()) ensureSongRouting();
   else if (actx) actx.resume();
-  if (audioEl.paused) {
-    audioEl.play();
-    playBtn.textContent = '⏸ Pause';
+  if (transportPaused()) {
+    transportPlay();
+    playBtn.innerHTML = '<i class="ti ti-player-pause"></i> Pause';
     startLoop();
   } else {
-    audioEl.pause();
-    playBtn.textContent = '▶ Play';
+    transportPause();
+    playBtn.innerHTML = '<i class="ti ti-player-play"></i> Play';
     stopLoop();
   }
 }
 
 function stopPlayback() {
-  audioEl.pause();
-  audioEl.currentTime = 0;
-  playBtn.textContent = '▶ Play';
+  transportPause();
+  transportSeekSec(0);
+  playBtn.innerHTML = '<i class="ti ti-player-play"></i> Play';
   isRecording = false;
   recBtn.classList.remove('armed');
   recBtn.textContent = '● Rec';
@@ -146,19 +148,20 @@ function stopPlayback() {
 }
 
 function toggleRecord() {
-  if (!audioReady) { showToast('Load an audio file first'); return; }
+  if (!transportReady()) { showToast('Load an audio file or a YouTube link first'); return; }
   isRecording = !isRecording;
   recBtn.classList.toggle('armed', isRecording);
   recBtn.textContent = isRecording ? '■ Stop Rec' : '● Rec';
-  if (isRecording && audioEl.paused) togglePlay();
+  if (isRecording && transportPaused()) togglePlay();
 }
 
 function startLoop() {
   cancelAnimationFrame(rafId);
-  scheduledUpToMs = audioEl.currentTime * 1000;
+  scheduledUpToMs = curTimeSec() * 1000;
   function loop() {
     if (playbackEnabled && actx) scheduleChartNotes();
-    if (zoom > 1 && !audioEl.paused) followPlayhead();
+    if (usingYouTube()) seekBar.value = curTimeSec();   // no timeupdate event for YT
+    if (zoom > 1 && !transportPaused()) followPlayhead();
     drawTimeline();
     updateTimeDisplay();
     rafId = requestAnimationFrame(loop);
@@ -171,7 +174,7 @@ function startLoop() {
 // context, drums line up with the music sample-accurately (no RAF jitter).
 const SCHED_LOOKAHEAD = 0.15;   // seconds
 function scheduleChartNotes() {
-  const songPos = audioEl.currentTime;     // seconds
+  const songPos = curTimeSec();            // seconds
   const ctxNow  = actx.currentTime;
   const fromMs  = scheduledUpToMs;
   const toMs    = (songPos + SCHED_LOOKAHEAD) * 1000;
@@ -193,9 +196,71 @@ function stopLoop() {
   rafId = null;
 }
 
+// ── Playback source (uploaded <audio> OR a YouTube video) ─────────────────────
+// The editor charts against a loaded track. Normally that's the uploaded audio;
+// if a YouTube video is loaded instead (for a YouTube-only song), the transport
+// routes to the YT player so Play / Record / scrub work against the video.
+function usingYouTube()   { return ytReady && !audioReady; }
+function transportReady() { return audioReady || ytReady; }
+function curTimeSec()     { return usingYouTube() ? (ytPlayer && ytPlayer.getCurrentTime ? (ytPlayer.getCurrentTime() || 0) : 0) : (audioEl.currentTime || 0); }
+function curDurSec()      { return usingYouTube() ? (ytPlayer && ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0) : (audioEl.duration || 0); }
+function transportPaused(){ return usingYouTube() ? (!ytPlayer || !ytPlayer.getPlayerState || ytPlayer.getPlayerState() !== 1) : audioEl.paused; }
+function transportPlay()  { if (usingYouTube()) { if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); } else audioEl.play(); }
+function transportPause() { if (usingYouTube()) { if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); } else audioEl.pause(); }
+function transportSeekSec(s) {
+  s = Math.max(0, s);
+  if (usingYouTube()) { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(s, true); }
+  else audioEl.currentTime = s;
+}
+
+// YouTube IFrame API — loaded on demand, then a player mounts in #ce-yt-player.
+let _ytApiCbs = [];
+function ensureYouTubeApi(cb) {
+  if (window.YT && window.YT.Player) { cb(); return; }
+  _ytApiCbs.push(cb);
+  if (window.__ceYtApiLoading) return;
+  window.__ceYtApiLoading = true;
+  window.onYouTubeIframeAPIReady = () => { _ytApiCbs.forEach(f => f()); _ytApiCbs = []; };
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+function parseYtId(url) {
+  const m = String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  return /^[A-Za-z0-9_-]{11}$/.test(String(url).trim()) ? String(url).trim() : null;
+}
+function loadYouTubeIntoEditor() {
+  const id = parseYtId((document.getElementById('song-youtube')?.value || '').trim());
+  if (!id) { showToast('Paste a valid YouTube link first'); return; }
+  const wrap = document.getElementById('ce-yt-wrap');
+  if (wrap) wrap.style.display = '';
+  ensureYouTubeApi(() => {
+    if (ytPlayer && ytPlayer.loadVideoById) { ytPlayer.loadVideoById(id); ytReady = true; onYtLoaded(); return; }
+    ytPlayer = new YT.Player('ce-yt-player', {
+      videoId: id,
+      width: '100%', height: '100%',
+      playerVars: { controls: 0, rel: 0, modestbranding: 1, playsinline: 1 },
+      events: {
+        onReady: () => { ytReady = true; onYtLoaded(); },
+        onStateChange: e => { if (window.YT && e.data === YT.PlayerState.ENDED) stopPlayback(); },
+      },
+    });
+  });
+}
+function onYtLoaded() {
+  showToast('YouTube loaded — Play / Rec now use the video');
+  const durS = ytPlayer && ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+  if (durS > 0) {
+    seekBar.max = durS;
+    if (!parseInt(durationIn.value, 10)) durationIn.value = Math.round(durS * 1000);
+  }
+  clampScroll(); syncZoomUI(); drawTimeline();
+}
+
 function updateTimeDisplay() {
-  const cur = audioEl.currentTime || 0;
-  const dur = audioEl.duration    || 0;
+  const cur = curTimeSec();
+  const dur = curDurSec();
   timeDisplay.textContent = formatTime(cur) + ' / ' + formatTime(dur);
 }
 
@@ -222,9 +287,9 @@ function hitPad(padIndex) {
     padEl.style.boxShadow = '';
   }, 150);
 
-  if (!isRecording || !audioReady) return;
+  if (!isRecording || !transportReady()) return;
 
-  let time = Math.round(audioEl.currentTime * 1000) - latencyMs;
+  let time = Math.round(curTimeSec() * 1000) - latencyMs;
   time = Math.max(0, time);
 
   // Quantize
@@ -384,6 +449,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cancelLearn(); clearSelection(); return; }
   if (e.key === ' ') { togglePlay(); return; }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { selectAll(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) { copySelected(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) { pasteClipboard(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { undoLast(); return; }
   if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); return; }
   if (e.key.startsWith('Arrow')) { nudgeSelected(e.key, e.shiftKey, e.repeat); return; }
@@ -452,7 +519,7 @@ function ensureTimeVisible(t) {
 
 // While playing zoomed-in, scroll the view to follow the playhead.
 function followPlayhead() {
-  const t = audioEl.currentTime * 1000;
+  const t = curTimeSec() * 1000;
   if (t < scrollMs || t > scrollMs + viewDur()) {
     scrollMs = t - viewDur() * 0.2;
     clampScroll();
@@ -464,7 +531,7 @@ function drawTimeline() {
   const W = canvas.width = canvas.offsetWidth;
   const H = canvas.height = canvas.offsetHeight;
   const rh = H / PADS.length;
-  const cur = audioEl.currentTime * 1000;
+  const cur = curTimeSec() * 1000;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#0d0d0f';
@@ -548,9 +615,9 @@ function drawTimeline() {
   if (drag && drag.kind === 'box' && drag.moved) {
     const bx0 = Math.min(drag.startX, drag.curX), bx1 = Math.max(drag.startX, drag.curX);
     const by0 = Math.min(drag.startY, drag.curY), by1 = Math.max(drag.startY, drag.curY);
-    ctx.fillStyle   = 'rgba(124,106,245,0.15)';
+    ctx.fillStyle   = 'rgba(139,92,246,0.15)';
     ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
-    ctx.strokeStyle = 'rgba(124,106,245,0.85)';
+    ctx.strokeStyle = 'rgba(139,92,246,0.85)';
     ctx.lineWidth   = 1;
     ctx.strokeRect(bx0, by0, bx1 - bx0, by1 - by0);
   }
@@ -562,7 +629,7 @@ const DRAG_THRESHOLD = 3;   // px of movement before a click becomes a drag
 let drag = null;            // { kind:'note'|'box', ... } — see beginNoteDrag / mousedown
 
 function curDur() {
-  return parseFloat(durationIn.value) || (audioEl.duration * 1000) || 60000;
+  return parseFloat(durationIn.value) || (curDurSec() * 1000) || 60000;
 }
 function canvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
@@ -721,10 +788,10 @@ window.addEventListener('mouseup', e => {
     } else if (!d.additive) {                   // plain click on empty area → deselect + seek
       selection.clear();
       const { x } = canvasCoords(e);
-      if (x >= LABEL_W && audioReady) {
-        audioEl.currentTime = timeFromX(x) / 1000;
-        seekBar.value = audioEl.currentTime;
-        scheduledUpToMs = audioEl.currentTime * 1000;
+      if (x >= LABEL_W && transportReady()) {
+        transportSeekSec(timeFromX(x) / 1000);
+        seekBar.value = curTimeSec();
+        scheduledUpToMs = curTimeSec() * 1000;
       }
     }
     updateNoteCount();
@@ -810,6 +877,39 @@ function deleteSelected() {
   save(); drawTimeline();
 }
 
+// Copy the selected hits, stored relative to the earliest so they paste as a block.
+function copySelected() {
+  if (!selection.size) return;
+  const arr  = [...selection].map(n => ({ time: n.time, lane: n.lane }));
+  const minT = arr.reduce((m, n) => Math.min(m, n.time), Infinity);
+  clipboard  = arr.map(n => ({ time: n.time - minT, lane: n.lane }))
+                  .sort((a, b) => a.time - b.time || a.lane - b.lane);
+  showToast(`Copied ${clipboard.length} hit${clipboard.length === 1 ? '' : 's'}`);
+}
+
+// Paste the clipboard at the playhead (earliest copied hit lands on the playhead).
+// The pasted hits become the new selection; Undo (Ctrl+Z) reverts the whole paste.
+function pasteClipboard() {
+  if (!clipboard.length) return;
+  quantizeBackup = notes.map(n => ({ ...n }));    // snapshot so Undo reverts the paste
+  const base   = Math.round(curTimeSec() * 1000);
+  const pasted = [];
+  for (const c of clipboard) {
+    const t = Math.max(0, base + c.time);
+    if (notes.some(n => n.lane === c.lane && Math.abs(n.time - t) < 30)) continue; // skip dupes
+    const nn = { time: t, lane: c.lane };
+    notes.push(nn);
+    pasted.push(nn);
+  }
+  notes.sort((a, b) => a.time - b.time);
+  selection.clear();
+  for (const n of pasted) selection.add(n);
+  updateNoteCount();
+  save(); drawTimeline();
+  ensureTimeVisible(base);
+  showToast(`Pasted ${pasted.length} hit${pasted.length === 1 ? '' : 's'} at playhead`);
+}
+
 // Fine-move every selected note with the arrow keys. Left/Right retime (by the
 // active grid, or 10ms when no grid; Shift = 1ms). Up/Down shift lane. The whole
 // selection moves together, clamped so it stays on-grid and in-range.
@@ -842,13 +942,46 @@ function nudgeSelected(key, fine, silent) {
 
 document.getElementById('btn-undo').addEventListener('click', undoLast);
 document.getElementById('btn-select-all').addEventListener('click', selectAll);
+document.getElementById('btn-copy-notes')?.addEventListener('click', copySelected);
+document.getElementById('btn-paste-notes')?.addEventListener('click', pasteClipboard);
+// Clear All resets the WHOLE editor — notes, song info, tags, audio and YouTube —
+// so the next save creates a brand-new song (it will NOT update the loaded one).
+// To wipe just the notes, use Ctrl+A then Delete instead.
 document.getElementById('btn-clear').addEventListener('click', () => {
-  if (!notes.length) return;
-  if (!confirm('Clear all ' + notes.length + ' notes?')) return;
-  notes = []; selection.clear();
+  if (!confirm('Clear EVERYTHING — notes, song info, tags, audio/YouTube — and start a new song?')) return;
+  stopPlayback();
+
+  notes = []; selection.clear(); clipboard = [];
   quantizeBackup = null;
+
+  titleIn.value = ''; artistIn.value = '';
+  bpmIn.value = 120; durationIn.value = 0;
+  const catSel = document.getElementById('song-category'); if (catSel) catSel.value = 'kit';
+  const ytIn = document.getElementById('song-youtube');    if (ytIn) ytIn.value = '';
+  document.querySelectorAll('.song-tag-cb').forEach(cb => { cb.checked = false; });
+
+  // Unload audio + YouTube so the transport fully resets.
+  audioEl.removeAttribute('src'); audioEl.load();
+  audioReady = false; loadedFile = null; fileInput.value = '';
+  if (ytPlayer && ytPlayer.stopVideo) { try { ytPlayer.stopVideo(); } catch (e) {} }
+  ytReady = false;
+  const ytWrap = document.getElementById('ce-yt-wrap'); if (ytWrap) ytWrap.style.display = 'none';
+
+  // Detach from the previously loaded song/request → next save INSERTS a new song.
+  savedSongId = '';
+  fromRequestId = '';
+  setSaveStatus('');
+  if (loadAudioBtn) loadAudioBtn.innerHTML = '<i class="ti ti-folder-open"></i> Load Audio File';
+  if (audioCurrent) { audioCurrent.textContent = ''; audioCurrent.classList.remove('replace'); }
+
+  seekBar.value = 0;
+  zoom = 1; scrollMs = 0;
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   updateNoteCount();
-  save(); drawTimeline();
+  updateTimeDisplay();
+  syncZoomUI();
+  drawTimeline();
+  showToast('Cleared — you\'re starting a new song');
 });
 
 // ── Latency ───────────────────────────────────────────────────────────────────
@@ -1174,7 +1307,7 @@ function refreshMidiUI() {
     const cell  = document.getElementById('mm-note-' + i);
     if (cell) cell.textContent = notes.length ? notes.join(', ') : '—';
     const label = document.querySelector(`.pad-midi[data-pad="${i}"]`);
-    if (label) label.textContent = notes.length ? '🥁 ' + notes.join(',') : '';
+    if (label) label.innerHTML = notes.length ? '<i class="ti ti-usb"></i> ' + notes.join(',') : '';
   });
   // Clear any listening visuals
   document.querySelectorAll('.mm-assign').forEach(b => {
@@ -1208,7 +1341,7 @@ document.getElementById('btn-map-pads').addEventListener('click', () => {
 
 const soundBtn = document.getElementById('btn-sound');
 function refreshSoundBtn() {
-  soundBtn.textContent = soundEnabled ? '🔊 Pad sounds' : '🔇 Pad sounds';
+  soundBtn.innerHTML = soundEnabled ? '<i class="ti ti-volume"></i> Pad sounds' : '<i class="ti ti-volume-off"></i> Pad sounds';
   soundBtn.classList.toggle('off', !soundEnabled);
 }
 soundBtn.addEventListener('click', () => {
@@ -1227,7 +1360,7 @@ playbackBtn.addEventListener('click', () => {
   playbackEnabled = !playbackEnabled;
   localStorage.setItem(PLAYBACK_KEY, playbackEnabled ? '1' : '0');
   if (playbackEnabled) ensureSongRouting();         // route song through context for sync
-  scheduledUpToMs = audioEl.currentTime * 1000;     // avoid burst when toggled mid-play
+  scheduledUpToMs = curTimeSec() * 1000;     // avoid burst when toggled mid-play
   refreshPlaybackBtn();
   showToast(playbackEnabled ? 'Chart playback ON — hear your recorded notes' : 'Chart playback off');
 });
@@ -1310,10 +1443,20 @@ updateTimeDisplay();
 // The site CSP forbids inline scripts/handlers, so the "Load Audio" button wires
 // up here instead of an inline onclick, and CSRF comes from a data element.
 document.getElementById('btn-load-audio')?.addEventListener('click', () => fileInput.click());
+document.getElementById('btn-load-youtube')?.addEventListener('click', loadYouTubeIntoEditor);
 
 const ceCfg     = document.getElementById('ce-config');
 const CE_CSRF   = ceCfg ? (ceCfg.dataset.csrf || '') : '';
 let savedSongId = ceCfg ? (ceCfg.dataset.songId || '') : ''; // set after first save → later saves update the same row
+
+// Charting a paid song request: prefill from it and mark the save exclusive +
+// linked so the buyer(s) get access (see song-editor.php ?request=ID).
+let fromRequestId = ceCfg ? (ceCfg.dataset.requestId || '') : '';
+if (fromRequestId) {
+  if (!titleIn.value && ceCfg.dataset.reqTitle) titleIn.value = ceCfg.dataset.reqTitle;
+  const ytIn = document.getElementById('song-youtube');
+  if (ytIn && ceCfg.dataset.reqYoutube) ytIn.value = ceCfg.dataset.reqYoutube;
+}
 
 const saveBtn      = document.getElementById('btn-save-library');
 const saveStatus   = document.getElementById('save-status');
@@ -1337,9 +1480,14 @@ saveBtn?.addEventListener('click', async () => {
   const chart = buildChart();
   if (!chart.notes.length)                    { setSaveStatus('Add some drum hits before saving.', 'err'); return; }
   if (!chart.title || chart.title === 'Untitled') { setSaveStatus('Enter a song title first.', 'err'); return; }
-  // Audio is required for a new song; when updating an existing one it's optional
-  // (the stored track is kept if no new file is loaded).
-  if (!loadedFile && !savedSongId)            { setSaveStatus('Load the audio file so it saves with the chart.', 'err'); return; }
+  // A new song needs *some* audio source: an uploaded track OR a YouTube link
+  // (YouTube-backed/exclusive songs have no mp3). Updating an existing one keeps
+  // whatever's stored if nothing new is provided.
+  const hasYouTube = !!(document.getElementById('song-youtube')?.value || '').trim();
+  if (!loadedFile && !savedSongId && !hasYouTube) {
+    setSaveStatus('Add an audio file or a YouTube link so the song has music.', 'err');
+    return;
+  }
 
   setSaveStatus('Saving…');
   saveBtn.disabled = true;
@@ -1348,6 +1496,10 @@ saveBtn?.addEventListener('click', async () => {
   if (savedSongId) fd.append('id', savedSongId);
   fd.append('title',    chart.title);
   fd.append('artist',   chart.artist === 'Unknown' ? '' : chart.artist);
+  fd.append('category', document.getElementById('song-category')?.value || 'kit');
+  fd.append('youtube_url', document.getElementById('song-youtube')?.value || '');
+  document.querySelectorAll('.song-tag-cb:checked').forEach(cb => fd.append('tag_ids[]', cb.value));
+  if (fromRequestId) { fd.append('request_id', fromRequestId); fd.append('visibility', 'exclusive'); }
   fd.append('bpm',      chart.bpm);
   fd.append('duration', chart.duration);
   fd.append('notes',    JSON.stringify(chart.notes));
@@ -1359,7 +1511,7 @@ saveBtn?.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) { setSaveStatus('Error: ' + (data.error || res.status), 'err'); return; }
     savedSongId = String(data.id);
-    setSaveStatus(`✅ Saved to library (song #${data.id}). Saving again updates it.`, 'ok');
+    setSaveStatus(`Saved to library (song #${data.id}). Saving again updates it.`, 'ok');
     showToast('Saved to library!');
   } catch (err) {
     setSaveStatus('Network error: ' + err.message, 'err');
@@ -1378,6 +1530,10 @@ if (ceCfg && ceCfg.dataset.songId && ceCfg.dataset.title !== undefined) {
   artistIn.value   = d.artist   || '';
   bpmIn.value      = d.bpm      || 120;
   durationIn.value = d.duration || 0;
+  const catSel = document.getElementById('song-category');
+  if (catSel && (d.category === 'kit' || d.category === 'pad')) catSel.value = d.category;
+  const ytIn = document.getElementById('song-youtube');
+  if (ytIn && d.youtube) ytIn.value = d.youtube;
 
   try { notes = JSON.parse(d.notes || '[]'); } catch { notes = []; }
   notes = notes.filter(n => n && Number.isFinite(+n.time) && Number.isFinite(+n.lane))
@@ -1394,7 +1550,7 @@ if (ceCfg && ceCfg.dataset.songId && ceCfg.dataset.title !== undefined) {
   restoreBar.style.display = 'none';   // editing a specific song overrides the autosave prompt
 
   if (d.audioUrl) {
-    if (loadAudioBtn) loadAudioBtn.textContent = '🔁 Replace Audio';
+    if (loadAudioBtn) loadAudioBtn.innerHTML = '<i class="ti ti-repeat"></i> Replace Audio';
     if (audioCurrent) {
       audioCurrent.textContent = `Current track: ${d.audioName || '(stored)'} — kept unless you load a replacement`;
       audioCurrent.classList.remove('replace');

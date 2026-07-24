@@ -14,7 +14,7 @@ Options -Indexes
   Header always set X-XSS-Protection            "1; mode=block"
   Header always set Referrer-Policy             "strict-origin-when-cross-origin"
   Header always set Permissions-Policy          "geolocation=(), microphone=(self), camera=()"
-  Header always set Content-Security-Policy     "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://ip-api.com; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self';"
+  Header always set Content-Security-Policy     "default-src 'self'; script-src 'self' https://js.stripe.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; media-src 'self' blob: https:; connect-src 'self' http://ip-api.com; frame-src https://js.stripe.com https://www.youtube.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self';"
   Header always set Strict-Transport-Security   "max-age=31536000; includeSubDomains"
 </IfModule>
 

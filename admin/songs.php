@@ -31,7 +31,12 @@ if ($editId) {
     $editSong = $st->fetch();
 }
 
-$songs = $db->query('SELECT id, title, artist, bpm, duration_ms, audio_filename, created_at FROM songs ORDER BY created_at DESC')->fetchAll();
+// `category` is optional until the migration runs.
+try {
+    $songs = $db->query('SELECT id, title, artist, category, bpm, duration_ms, audio_filename, created_at FROM songs ORDER BY created_at DESC')->fetchAll();
+} catch (\Throwable $e) {
+    $songs = $db->query('SELECT id, title, artist, bpm, duration_ms, audio_filename, created_at FROM songs ORDER BY created_at DESC')->fetchAll();
+}
 
 $pageTitle = 'Songs — Admin';
 $pageCss   = ['main', 'admin'];
@@ -49,8 +54,11 @@ require __DIR__ . '/../includes/header.php';
     <a href="/admin/students.php">Students</a>
     <a href="/admin/sessions.php">Sessions</a>
     <a href="/admin/songs.php" class="active">Songs</a>
+    <a href="/admin/song-tags.php">Song Tags</a>
+    <a href="/admin/song-requests.php">Song Requests</a>
     <a href="/admin/song-editor.php">Chart Editor</a>
     <a href="/admin/placement-tests.php">Placement Tests</a>
+    <a href="/admin/investor-agreement.php">Investor Agreement</a>
   </div>
 </div>
 
@@ -73,6 +81,16 @@ require __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
+    <div class="form-group">
+      <label>Category</label>
+      <?php $editCat = $editSong['category'] ?? 'kit'; ?>
+      <select id="dk-category">
+        <option value="kit" <?= $editCat !== 'pad' ? 'selected' : '' ?>>Kit — E-Drums / Acoustic</option>
+        <option value="pad" <?= $editCat === 'pad' ? 'selected' : '' ?>>Practice Pad</option>
+      </select>
+      <span class="field-hint">Which input this song is for. Pad songs only show for the Practice Pad.</span>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label>BPM</label>
@@ -85,9 +103,9 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <div class="alert alert-info" style="margin-bottom:1rem">
-      🥁 <strong>Best way to build a chart:</strong> open the
+      <i class="ti ti-music" aria-hidden="true"></i> <strong>Best way to build a chart:</strong> open the
       <a href="/admin/song-editor.php">Chart Editor</a> — load the track, play along on your
-      e-drums or keyboard to record all the hits, then click <strong>💾 Save to Library</strong>.
+      e-drums or keyboard to record all the hits, then click <strong>Save to Library</strong>.
       Use the form below only for quick metadata edits or pasting a notes array.
     </div>
 
@@ -120,19 +138,20 @@ require __DIR__ . '/../includes/header.php';
 <div class="table-scroll">
 <table class="data-table" id="songs-table">
   <thead>
-    <tr><th>Title</th><th>Artist</th><th>BPM</th><th>Duration</th><th>Audio</th><th>Added</th><th></th></tr>
+    <tr><th>Title</th><th>Artist</th><th>Category</th><th>BPM</th><th>Duration</th><th>Audio</th><th>Added</th><th></th></tr>
   </thead>
   <tbody>
   <?php foreach ($songs as $s): ?>
   <tr data-id="<?= $s['id'] ?>">
     <td><?= htmlspecialchars($s['title']) ?></td>
     <td><?= htmlspecialchars($s['artist']) ?></td>
+    <td><?= (($s['category'] ?? 'kit') === 'pad') ? '<i class="ti ti-target"></i> Pad' : '<i class="ti ti-music"></i> Kit' ?></td>
     <td><?= $s['bpm'] ?></td>
     <td><?= $s['duration_ms'] ? round($s['duration_ms'] / 1000) . 's' : '—' ?></td>
-    <td><?= $s['audio_filename'] ? '✅' : '—' ?></td>
+    <td><?= $s['audio_filename'] ? '<i class="ti ti-check" style="color:var(--success)"></i>' : '—' ?></td>
     <td><?= date('M j, Y', strtotime($s['created_at'])) ?></td>
     <td class="row-actions">
-      <a href="/admin/song-editor.php?song=<?= $s['id'] ?>" class="btn btn-ghost btn-xs" title="Open in the Chart Editor (play along to edit hits)">🥁 Editor</a>
+      <a href="/admin/song-editor.php?song=<?= $s['id'] ?>" class="btn btn-ghost btn-xs" title="Open in the Chart Editor (play along to edit hits)"><i class="ti ti-music" aria-hidden="true"></i> Editor</a>
       <a href="/admin/songs.php?edit=<?= $s['id'] ?>" class="btn btn-ghost btn-xs">Edit</a>
       <button class="btn btn-danger btn-xs delete-song-btn" data-id="<?= $s['id'] ?>" data-title="<?= htmlspecialchars($s['title']) ?>">Delete</button>
     </td>
@@ -151,5 +170,5 @@ require __DIR__ . '/../includes/header.php';
 
 </main>
 
-<script src="/assets/js/admin.js?v=20260705"></script>
+<script src="/assets/js/admin.js?v=20260717"></script>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

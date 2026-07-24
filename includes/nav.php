@@ -3,6 +3,8 @@
 require_once __DIR__ . '/programs.php';
 require_once __DIR__ . '/access.php';
 $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$navRole = $user['role'] ?? 'user';
+$navHome = roleHome($navRole);   // brand link target per role
 
 // The placement test is a one-time assessment — hide it once taken (admins keep
 // it); the "My Plan" link takes its place once the student has a result.
@@ -35,15 +37,23 @@ $navRemindProof = $navStudent
 ?>
 <nav class="top-nav">
   <div class="nav-brand">
-    <a href="/dashboard.php"><span class="drum-icon">🥁</span> <span class="brand-name"><?= SITE_NAME ?></span><span class="brand-abbr">ZADA</span></a>
+    <a href="<?= htmlspecialchars($navHome) ?>"><span class="drum-icon"><i class="ti ti-music" aria-hidden="true"></i></span> <span class="brand-name"><?= SITE_NAME ?></span><span class="brand-abbr">ZADA</span></a>
   </div>
   <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
   <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
   <ul class="nav-links">
+    <?php if ($navRole === 'partner'): ?>
+    <li><a href="/partner.php" class="<?= $currentPath === '/partner.php' ? 'active' : '' ?>">Partner</a></li>
+    <?php elseif ($navRole === 'editor'): ?>
+    <li><a href="/admin/song-tags.php"     class="<?= $currentPath === '/admin/song-tags.php' ? 'active' : '' ?>">Song Tags</a></li>
+    <li><a href="/admin/song-requests.php" class="<?= $currentPath === '/admin/song-requests.php' ? 'active' : '' ?>">Song Requests</a></li>
+    <li><a href="/admin/song-editor.php"   class="<?= $currentPath === '/admin/song-editor.php' ? 'active' : '' ?>">Chart Editor</a></li>
+    <?php else: ?>
     <?php if ($navShowEnrollment): ?>
     <li><a href="/my-membership.php" class="<?= $currentPath === '/my-membership.php' ? 'active' : '' ?>">My Enrollment</a></li>
     <?php endif; ?>
     <li><a href="/game.php"      class="<?= $currentPath === '/game.php'    ? 'active' : '' ?>">Game</a></li>
+    <li><a href="/request-song.php" class="<?= $currentPath === '/request-song.php' ? 'active' : '' ?>">Request a Song</a></li>
     <?php if ($navShowPlacement): ?>
     <li><a href="/placement-test.php" class="<?= $currentPath === '/placement-test.php' ? 'active' : '' ?>">Placement Test</a></li>
     <?php endif; ?>
@@ -58,6 +68,7 @@ $navRemindProof = $navStudent
     <?php if (($user['role'] ?? '') === 'admin'): ?>
     <li><a href="/admin/"        class="<?= str_starts_with($currentPath, '/admin') ? 'active' : '' ?>">Admin</a></li>
     <?php endif; ?>
+    <?php endif; /* role branch */ ?>
   </ul>
   <div class="nav-user">
     <span><?= htmlspecialchars($user['username'] ?? '') ?></span>

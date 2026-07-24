@@ -1,8 +1,17 @@
-export const TIMING = {
-  PERFECT: 40,
-  GOOD: 100,
-  MISS_EXPIRE: 200,
-};
+// Two window presets — Normal (default, forgiving) and Precision (an
+// opt-in challenge mode for players who want it tight, roughly in line with
+// hardcore rhythm games like ITG's tighter judgment tiers). TIMING itself
+// stays a single mutable object (rather than swapping which object is
+// exported) so every other module's `TIMING.PERFECT` etc. reads always see
+// whichever preset is currently active without re-importing anything.
+const TIMING_NORMAL    = { PERFECT: 70, GOOD: 170, MISS_EXPIRE: 280 };
+const TIMING_PRECISION = { PERFECT: 25, GOOD: 60,  MISS_EXPIRE: 110 };
+
+export const TIMING = { ...TIMING_NORMAL };
+
+export function setPrecisionMode(enabled) {
+  Object.assign(TIMING, enabled ? TIMING_PRECISION : TIMING_NORMAL);
+}
 
 export const SCORE_VALUES = { PERFECT: 100, GOOD: 50, MISS: 0 };
 
@@ -47,13 +56,19 @@ function laneBucket(state, lane) {
 // `lane` are optional and only feed the post-play analysis — omitting them
 // preserves the original scoring behaviour.
 export function judgeHit(state, diff, signedDiff = null, lane = null) {
-  let judgment;
-  if (diff <= TIMING.PERFECT)      judgment = 'PERFECT';
-  else if (diff <= TIMING.GOOD)    judgment = 'GOOD';
-  else                             return null; // outside window
+  if (diff > TIMING.GOOD) return null; // outside window entirely — a miss
+
+  const judgment = diff <= TIMING.PERFECT ? 'PERFECT' : 'GOOD';
+  // Lenient on whether a hit counts (the full GOOD window still registers,
+  // keeps the combo alive, no punishing misses) but strict on what it's
+  // worth — points fall off with the CUBE of how far off you were, not
+  // linearly, so only genuine precision scores well. A hit halfway across
+  // the window scores ~12 points, not ~70 like a straight-line falloff would.
+  const t      = diff / TIMING.GOOD; // 0 (dead-on) .. 1 (edge of window)
+  const points = Math.round(100 * Math.pow(1 - t, 3));
 
   const mult   = getMultiplier(state.combo);
-  state.score += SCORE_VALUES[judgment] * mult;
+  state.score += points * mult;
   state.combo += 1;
   if (state.combo > state.maxCombo) state.maxCombo = state.combo;
   state.counts[judgment]++;

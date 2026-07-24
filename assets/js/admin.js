@@ -65,6 +65,7 @@ form.addEventListener('submit', async (e) => {
   if (id) fd.append('id', id);
   fd.append('title',    title);
   fd.append('artist',   artist);
+  fd.append('category', document.getElementById('dk-category')?.value || 'kit');
   fd.append('bpm',      bpm);
   fd.append('duration', duration);
   fd.append('notes',    JSON.stringify(notesArr));

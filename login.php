@@ -2,7 +2,12 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 
 sessionStart();
-if (isLoggedIn()) { header('Location: ' . SITE_URL . '/dashboard.php'); exit; }
+if (isLoggedIn()) {
+    $u = getCurrentUser();
+    $r = $u['role'] ?? 'user';
+    header('Location: ' . SITE_URL . (($r === 'editor' || $r === 'partner') ? roleHome($r) : '/dashboard.php'));
+    exit;
+}
 
 $error      = '';
 $socialNext = safeRedirectPath($_GET['next'] ?? '/dashboard.php');
@@ -21,7 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $result   = loginUser($login, $password);
     if (is_array($result)) {
-        header('Location: ' . SITE_URL . safeRedirectPath($_POST['next'] ?? '/dashboard.php'));
+        $role = $result['role'] ?? 'user';
+        if ($role === 'admin' && ADMIN_DEVICE_LOCK && !adminDeviceTrusted((int) $result['id'])) {
+            // Admin on an unregistered device → verify it before entering the admin area.
+            $dest = '/verify-device.php?next=' . urlencode('/admin/');
+        } elseif ($role === 'editor' || $role === 'partner') {
+            $dest = roleHome($role);
+        } else {
+            $dest = safeRedirectPath($_POST['next'] ?? '/dashboard.php');
+        }
+        header('Location: ' . SITE_URL . $dest);
         exit;
     }
     $error = $result; // string = error message
