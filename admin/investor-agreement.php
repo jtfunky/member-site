@@ -66,15 +66,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Investor Agreement</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php" class="active">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>

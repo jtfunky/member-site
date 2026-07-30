@@ -103,15 +103,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container">
 <div class="admin-header">
   <h1>Sessions</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php" class="active">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
@@ -160,7 +152,7 @@ require __DIR__ . '/../includes/header.php';
         <td data-label="Sessions"><?= (int) $t['credits'] ?></td>
         <td data-label="Amount"><?= $t['amount'] !== null ? htmlspecialchars($t['currency'] . ' ' . number_format((float) $t['amount'], 0)) : '—' ?></td>
         <td data-label="Proof"><?php if ($t['proof_url']): ?><a href="<?= htmlspecialchars($t['proof_url']) ?>" target="_blank" rel="noopener">view ↗</a><?php else: ?>—<?php endif; ?></td>
-        <td data-label="Submitted" style="white-space:nowrap"><?= htmlspecialchars(date('M j, Y', strtotime($t['created_at']))) ?></td>
+        <td data-label="Submitted" style="white-space:nowrap"><?= htmlspecialchars(formatManilaDate($t['created_at'])) ?></td>
         <td data-label="" style="white-space:nowrap">
           <form method="POST" style="display:inline">
             <?= csrfField() ?>

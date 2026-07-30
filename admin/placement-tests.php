@@ -25,15 +25,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Placement Tests</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <a href="/admin/placement-tests.php" class="active">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if (!$hasTable): ?>
@@ -63,7 +55,7 @@ require __DIR__ . '/../includes/header.php';
         <td><?= (int) $t['perfect'] ?> / <?= (int) $t['good'] ?> / <?= (int) $t['miss'] ?></td>
         <td><?= (int) $t['max_combo'] ?></td>
         <td><?= htmlspecialchars($biasTxt) ?><br><small>±<?= (int) $t['timing_consistency_ms'] ?>ms</small></td>
-        <td><small><?= htmlspecialchars(date('M j, Y', strtotime($t['created_at']))) ?></small></td>
+        <td><small><?= htmlspecialchars(formatManilaDate($t['created_at'])) ?></small></td>
         <td>
           <?php if (!empty($t['ai_feedback'])): ?>
             <details>

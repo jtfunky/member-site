@@ -127,16 +127,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Users</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php" class="active">Users</a>
-    <a href="/admin/devices.php">My Devices</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
@@ -188,7 +179,7 @@ require __DIR__ . '/../includes/header.php';
     <div>
       <p><strong>Email:</strong> <?= htmlspecialchars($editUser['email']) ?></p>
       <p><strong>Name:</strong> <?= htmlspecialchars($editUser['first_name'] . ' ' . $editUser['last_name']) ?></p>
-      <p><strong>Joined:</strong> <?= date('M j, Y', strtotime($editUser['created_at'])) ?></p>
+      <p><strong>Joined:</strong> <?= formatManilaDate($editUser['created_at']) ?></p>
       <p><strong>Type:</strong> <?= $editUser['registration_type'] ?></p>
       <p><strong>Role:</strong> <?= htmlspecialchars($editUser['role']) ?></p>
       <p><strong>Access Expires:</strong> <?= $editUser['access_expires_at'] ? date('M j, Y H:i', strtotime($editUser['access_expires_at'])) : 'None' ?></p>
@@ -281,7 +272,7 @@ require __DIR__ . '/../includes/header.php';
         <td><?= htmlspecialchars($p['payment_method']) ?></td>
         <td class="font-mono text-sm"><?= htmlspecialchars($p['transaction_id']) ?></td>
         <td><?= date('M j', strtotime($p['period_start'])) ?> – <?= date('M j, Y', strtotime($p['period_end'])) ?></td>
-        <td><?= date('M j, Y', strtotime($p['created_at'])) ?></td>
+        <td><?= formatManilaDate($p['created_at']) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

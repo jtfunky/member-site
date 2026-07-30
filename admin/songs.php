@@ -48,18 +48,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Songs</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php" class="active">Songs</a>
-    <a href="/admin/song-tags.php">Song Tags</a>
-    <a href="/admin/song-requests.php">Song Requests</a>
-    <a href="/admin/song-editor.php">Chart Editor</a>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
@@ -149,7 +138,7 @@ require __DIR__ . '/../includes/header.php';
     <td><?= $s['bpm'] ?></td>
     <td><?= $s['duration_ms'] ? round($s['duration_ms'] / 1000) . 's' : '—' ?></td>
     <td><?= $s['audio_filename'] ? '<i class="ti ti-check" style="color:var(--success)"></i>' : '—' ?></td>
-    <td><?= date('M j, Y', strtotime($s['created_at'])) ?></td>
+    <td><?= formatManilaDate($s['created_at']) ?></td>
     <td class="row-actions">
       <a href="/admin/song-editor.php?song=<?= $s['id'] ?>" class="btn btn-ghost btn-xs" title="Open in the Chart Editor (play along to edit hits)"><i class="ti ti-music" aria-hidden="true"></i> Editor</a>
       <a href="/admin/songs.php?edit=<?= $s['id'] ?>" class="btn btn-ghost btn-xs">Edit</a>

@@ -28,15 +28,7 @@ require __DIR__ . '/../includes/header.php';
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Admin Dashboard</h1>
-  <div class="admin-nav-pills">
-    <a href="/admin/" class="active">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <div class="stats-grid">
@@ -83,7 +75,7 @@ require __DIR__ . '/../includes/header.php';
       <td><?= htmlspecialchars($u['email']) ?></td>
       <td><span class="badge <?= $statusClass ?>"><?= $expired ? 'expired' : $u['subscription_status'] ?></span></td>
       <td><?= $u['access_expires_at'] ? date('M j, Y', strtotime($u['access_expires_at'])) : '—' ?></td>
-      <td><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
+      <td><?= formatManilaDate($u['created_at']) ?></td>
       <td><a href="/admin/users.php?edit=<?= $u['id'] ?>" class="btn btn-ghost btn-xs">Manage</a></td>
     </tr>
   <?php endforeach; ?>
