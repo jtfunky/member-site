@@ -6,6 +6,21 @@ requireProfileComplete($user); // self-signups must finish their profile first
 requirePlacementTest($user);   // new signups take the placement test first
 requirePremium($user);
 
+// One-on-one students only — self-registered "Groove Quest" users don't get
+// this. Mirrors the same students-table check used to gate "My Sessions".
+if (($user['role'] ?? '') !== 'admin') {
+    $exclusiveStudent = null;
+    try {
+        $st = db()->prepare('SELECT program, session_credits, payment_status FROM students WHERE user_id = ? LIMIT 1');
+        $st->execute([(int) $user['id']]);
+        $exclusiveStudent = $st->fetch() ?: null;
+    } catch (\Throwable $e) { /* students table optional */ }
+    if (!studentHasSessions($exclusiveStudent)) {
+        header('Location: ' . SITE_URL . '/dashboard.php');
+        exit;
+    }
+}
+
 $pageTitle = 'Exclusive Content — ' . SITE_NAME;
 $pageCss   = ['main', 'dashboard'];
 $showNav   = true;

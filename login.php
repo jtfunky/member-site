@@ -5,12 +5,15 @@ sessionStart();
 if (isLoggedIn()) {
     $u = getCurrentUser();
     $r = $u['role'] ?? 'user';
-    header('Location: ' . SITE_URL . (($r === 'editor' || $r === 'partner') ? roleHome($r) : '/dashboard.php'));
+    header('Location: ' . SITE_URL . (($r === 'editor' || $r === 'partner') ? roleHome($r) : defaultPostLoginRedirect($u)));
     exit;
 }
 
 $error      = '';
-$socialNext = safeRedirectPath($_GET['next'] ?? '/dashboard.php');
+$unverified = false;
+// Only carry an explicit deep-link through; an absent one is resolved to the
+// right default (dashboard vs. game-coming-soon) once we know who logged in.
+$socialNext = isset($_GET['next']) ? safeRedirectPath($_GET['next']) : '';
 $next       = htmlspecialchars($socialNext);
 
 if (isset($_GET['expired'])) {
@@ -33,12 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($role === 'editor' || $role === 'partner') {
             $dest = roleHome($role);
         } else {
-            $dest = safeRedirectPath($_POST['next'] ?? '/dashboard.php');
+            $postNext = trim($_POST['next'] ?? '');
+            $dest = $postNext !== '' ? safeRedirectPath($postNext) : defaultPostLoginRedirect($result);
         }
         header('Location: ' . SITE_URL . $dest);
         exit;
     }
-    $error = $result; // string = error message
+    if ($result === EMAIL_NOT_VERIFIED) {
+        $unverified = true;
+    } else {
+        $error = $result; // string = error message
+    }
 }
 
 $pageTitle = 'Log In — ' . SITE_NAME;
@@ -50,7 +58,12 @@ require __DIR__ . '/includes/header.php';
   <a class="auth-logo" href="/"><?= SITE_NAME ?></a>
   <h1>Welcome back</h1>
 
-  <?php if ($error): ?>
+  <?php if ($unverified): ?>
+  <div class="alert alert-error">
+    Please verify your email before logging in.
+    <a href="/resend-verification.php">Resend the verification link</a>.
+  </div>
+  <?php elseif ($error): ?>
   <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
   <?php endif; ?>
 
@@ -75,6 +88,5 @@ require __DIR__ . '/includes/header.php';
   <?php require __DIR__ . '/includes/social-buttons.php'; ?>
 
   <p class="auth-switch">Don't have an account? <a href="/register.php">Sign up</a></p>
-  <p class="auth-switch">Enrolling in a program? <a href="/student-signup.php">Student enrollment →</a></p>
 </div>
 <?php require __DIR__ . '/includes/footer.php'; ?>

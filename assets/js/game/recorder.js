@@ -7,7 +7,7 @@
 // it records .webm instead — there's no way to force real .mp4 encoding from
 // client-side JS without a heavy wasm transcoder, so we're honest about the
 // extension we actually produce rather than mislabeling a .webm as .mp4.
-import { getRecordDestination } from './audio-context.js?v=20260720c';
+import { getRecordDestination } from './audio-context.js?v=20260727';
 
 let mediaRecorder = null;
 let chunks        = [];

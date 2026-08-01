@@ -25,13 +25,15 @@ if ($isLink) {
     $_SESSION['oauth_link_user'] = (int) $current['id'];
     $_SESSION['oauth_next']      = '/profile.php';
 } else {
-    if (isLoggedIn()) { header('Location: ' . SITE_URL . '/dashboard.php'); exit; }
+    if (isLoggedIn()) { header('Location: ' . SITE_URL . defaultPostLoginRedirect(getCurrentUser())); exit; }
     if (tooManyRequests('oauth', 20, 15)) {
         header('Location: ' . SITE_URL . '/login.php?social_error=' . urlencode('Too many attempts. Please wait a few minutes and try again.'));
         exit;
     }
     $_SESSION['oauth_mode'] = 'login';
-    $_SESSION['oauth_next'] = safeRedirectPath($_GET['next'] ?? '/dashboard.php');
+    // Only carry an explicit deep-link through; an absent one is resolved to
+    // the right default once oauth-callback.php knows who logged in.
+    $_SESSION['oauth_next'] = (isset($_GET['next']) && $_GET['next'] !== '') ? safeRedirectPath($_GET['next']) : null;
 }
 
 $state = bin2hex(random_bytes(32));

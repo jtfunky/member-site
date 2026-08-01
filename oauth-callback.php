@@ -67,11 +67,12 @@ if ($mode === 'link') {
 }
 
 // ── Login / create mode ──
-$next   = $_SESSION['oauth_next'] ?? '/dashboard.php';
-$result = oauthLoginOrCreate($provider, $profile);
+$sessionNext = $_SESSION['oauth_next'] ?? null;
+$result      = oauthLoginOrCreate($provider, $profile);
 oauthClear();
 
 if (is_string($result)) oauthFail('login', $result);
 
+$next = $sessionNext ?: defaultPostLoginRedirect($result);
 header('Location: ' . SITE_URL . safeRedirectPath($next));
 exit;

@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /includes/
+Disallow: /uploads/
+
+Sitemap: https://members.zachalcasid.com/sitemap.xml

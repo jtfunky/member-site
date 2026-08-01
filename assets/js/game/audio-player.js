@@ -1,7 +1,7 @@
 // Audio player — loads from URL (no base64 needed)
 // Uses Web Audio API for precise sync with game time
 
-import { getSharedCtx, getRecordDestination } from './audio-context.js?v=20260720c';
+import { getSharedCtx, getRecordDestination, getMasterGain } from './audio-context.js?v=20260727';
 
 let source      = null;
 let audioBuffer = null;
@@ -62,7 +62,7 @@ export function playAudio(offsetMs = 0, rate = 1) {
   source.buffer = audioBuffer;
   playRate      = rate > 0 ? rate : 1;
   source.playbackRate.value = playRate;   // slows audio (pitch drops with it)
-  source.connect(ac.destination);
+  source.connect(getMasterGain());
   source.connect(getRecordDestination());
 
   startOffset = offsetMs / 1000;

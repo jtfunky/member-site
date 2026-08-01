@@ -216,7 +216,7 @@ only; the Company's quarterly statement (Section 4.1) is the authoritative numbe
       <td><?= htmlspecialchars($s['email']) ?></td>
       <td><span class="badge badge-<?= htmlspecialchars($status) ?>"><?= htmlspecialchars($status) ?></span></td>
       <td><?= $s['access_expires_at'] ? date('M j, Y', strtotime($s['access_expires_at'])) : '—' ?></td>
-      <td><?= date('M j, Y', strtotime($s['created_at'])) ?></td>
+      <td><?= formatManilaDate($s['created_at']) ?></td>
     </tr>
   <?php endforeach; ?>
   <?php if (!$subscribers): ?>

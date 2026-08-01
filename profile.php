@@ -24,6 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $res = oauthUnlink((int) $user['id'], $_POST['provider'] ?? '');
         if ($res === true) { $success = 'Social account disconnected.'; $user = getCurrentUser(); }
         else               { $error   = $res; }
+    } elseif (($_POST['promo_action'] ?? '') === 'redeem') {
+        $code  = strtoupper(trim($_POST['promo_code'] ?? ''));
+        $promo = validatePromoCode($code);
+        if (is_string($promo)) {
+            $error = $promo;
+        } elseif (redeemPromoCode((int) $promo['id'], (int) $user['id'], (int) $promo['bonus_days'])) {
+            $user    = getCurrentUser(); // refresh — access_expires_at just changed
+            $success = 'Promo code applied — ' . ((int) $promo['bonus_days'] >= 36500 ? 'unlimited access' : (int) $promo['bonus_days'] . ' bonus days') . ' added!';
+        } else {
+            $error = "You've already redeemed this promo code.";
+        }
     } else {
         $first = trim($_POST['first_name'] ?? '');
         $last  = trim($_POST['last_name']  ?? '');
@@ -71,6 +82,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $avatarUrl = $user['avatar']
     ? UPLOAD_AVATAR_URL . htmlspecialchars($user['avatar'])
     : '/assets/img/avatar-default.svg';
+
+// Accounts created before the referral migration ran won't have a code yet —
+// backfill lazily on first profile view rather than requiring a bulk update.
+if (empty($user['referral_code'])) {
+    $newCode = generateReferralCode();
+    db()->prepare('UPDATE users SET referral_code=? WHERE id=?')->execute([$newCode, $user['id']]);
+    $user['referral_code'] = $newCode;
+}
+$referralLink = SITE_URL . '/register.php?ref=' . urlencode($user['referral_code']);
 
 $pageTitle = 'My Profile — ' . SITE_NAME;
 $pageCss   = ['main', 'dashboard'];
@@ -128,6 +148,29 @@ require __DIR__ . '/includes/header.php';
     <a href="/change-password.php" class="btn btn-ghost">Change Password</a>
   </div>
 </form>
+
+<section class="connected-accounts" id="referral">
+  <h2>Your referral link</h2>
+  <p class="field-hint">Share this link — when someone signs up through it, you get <?= REFERRAL_REWARD_DAYS ?> days of free access.</p>
+  <div style="display:flex; gap:.75rem; align-items:center">
+    <input type="text" id="referral-link-input" value="<?= htmlspecialchars($referralLink) ?>" readonly class="input-disabled font-mono" style="flex:1; margin:0">
+    <button type="button" class="btn btn-secondary btn-sm" style="flex:none" onclick="navigator.clipboard.writeText(document.getElementById('referral-link-input').value)">Copy</button>
+  </div>
+</section>
+
+<section class="connected-accounts" id="promo">
+  <h2>Have a promo code?</h2>
+  <p class="field-hint">Enter a code from the team to add bonus days to your account.</p>
+  <form method="POST" action="/profile.php" class="conn-form" style="display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap">
+    <?= csrfField() ?>
+    <input type="hidden" name="promo_action" value="redeem">
+    <div class="form-group" style="margin:0; flex:1; min-width:200px">
+      <label>Promo Code</label>
+      <input type="text" name="promo_code" placeholder="e.g. LAUNCH2026" style="text-transform:uppercase">
+    </div>
+    <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+  </form>
+</section>
 
 <?php
 $enabledProviders = oauthEnabledProviders();

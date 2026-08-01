@@ -30,6 +30,23 @@ export function reset() {
   activeNotes.length = 0;
 }
 
+// Jumps the note cursor to an arbitrary song position (practice-mode scrubbing).
+// Notes before songPosition are silently skipped — never judged as hits or
+// misses, matching "practice this part" intent rather than a graded run.
+export function seekTo(songPosition) {
+  if (!songData) return;
+  activeNotes.length = 0;
+  // First index whose note time is >= songPosition (binary search — notes are
+  // assumed sorted by time, same assumption updateChart already relies on).
+  let lo = 0, hi = songData.notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (songData.notes[mid].time < songPosition) lo = mid + 1;
+    else hi = mid;
+  }
+  cursor = lo;
+}
+
 // Find closest unhit note in a lane for hit detection
 export function findClosestNote(lane, songPosition, windowMs) {
   let bestIdx  = -1;

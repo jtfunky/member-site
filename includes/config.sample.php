@@ -12,7 +12,7 @@ define('DB_PASS', 'your_db_password');
 
 // ── Site ──────────────────────────────────────────────────
 define('SITE_URL', 'https://members.example.com');
-define('SITE_NAME', 'Zach Alcasid Drum Academy');
+define('SITE_NAME', 'ZADA - Groove Quest');
 define('MAIL_FROM', 'noreply@example.com');
 
 // ── AI feedback (Claude) ──────────────────────────────────
@@ -27,6 +27,29 @@ define('PRICE_USD',   20.00);
 define('TRIAL_DAYS_SELF',   15);
 define('SUBSCRIPTION_DAYS', 30);
 define('CANCEL_WINDOW_DAYS', 7);
+define('REFERRAL_REWARD_DAYS', 7); // free days granted to the REFERRER when their link is used
+
+// ── Game launch gating (all dates Asia/Manila) ──────────────
+define('GAME_BETA_LAUNCH_AT', '2026-07-31 00:00:00');
+define('GAME_FREE_ACCESS_CUTOFF', '2026-08-25 00:00:00');
+define('GAME_FREE_ACCESS_UNTIL',  '2026-08-31 23:59:59');
+define('GAME_LAUNCH_TRIAL_DAYS', 7);
+// One email, or a comma-separated list, for QA accounts that need the game
+// before the public beta launch date.
+define('GAME_BETA_BYPASS_EMAIL', 'bongalcasid+keytest@gmail.com');
+// Song requests are free during the beta — no payment step, straight to
+// charting once approved. Real pricing (SONG_REQUEST_PRICE in
+// includes/song_requests.php) resumes automatically after this date.
+define('SONG_REQUEST_FREE_UNTIL', '2026-09-01 00:00:00');
+define('RAFFLE_TICKETS_DIR', __DIR__ . '/../../raffle-tickets/');
+define('RAFFLE_WINNERS_PAGE_PATH', __DIR__ . '/../../../zachalcasid.com/public_html/raffle-winners.html');
+define('RAFFLE_WINNERS_JSON_PATH', __DIR__ . '/../../../zachalcasid.com/public_html/raffle-winners.json');
+
+// ── Facebook Page auto-poster ────────────────────────────────
+// Page access token (long-lived) for the "Zach Alcasid" Page, generated via
+// the "Groove Quest Auto Poster" Meta app. Empty = feature off.
+define('FB_PAGE_ID', '');
+define('FB_PAGE_ACCESS_TOKEN', '');
 
 // ── Uploads ───────────────────────────────────────────────
 define('UPLOAD_AUDIO_DIR',  __DIR__ . '/../uploads/audio/');
@@ -68,6 +91,16 @@ define('NOTIFY_CC', '');
 // email works — otherwise you could lock yourself out. Editors/Partners/students
 // are unaffected. Escape hatch: set false here, or delete the admin_devices row.
 define('ADMIN_DEVICE_LOCK', false);
+
+// ── Support chatbot ────────────────────────────────────────
+// Shown site-wide as a floating widget once ANTHROPIC_API_KEY is set (see
+// above, shared with AI placement-test feedback). Escalation contact shown
+// when the bot can't help.
+define('SUPPORT_EMAIL', 'support@zachalcasid.com');
+
+// New-registration/enrollment/raffle-signup notifications go here instead of
+// admin accounts' personal inboxes.
+define('REGISTRATION_EMAIL', 'registration@zachalcasid.com');
 
 // ── Payment ───────────────────────────────────────────────
 define('PAYMENT_MODE', 'dummy');   // 'stripe' / 'maya' once keys are set

@@ -16,6 +16,8 @@ uploads/investor-proofs/*
 _opcache-check.php
 _diag.php
 _min.php
+_local-preview-*.html
+scratch-*.php
 signuptest.php
 *.log
 

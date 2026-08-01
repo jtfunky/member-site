@@ -168,22 +168,7 @@ function tagRow(array $t, bool $isChild): void { ?>
 <main class="container container--wide">
 <div class="admin-header">
   <h1>Song Tags</h1>
-  <div class="admin-nav-pills">
-    <?php if ($user['role'] === 'admin'): ?>
-    <a href="/admin/">Overview</a>
-    <a href="/admin/users.php">Users</a>
-    <a href="/admin/students.php">Students</a>
-    <a href="/admin/sessions.php">Sessions</a>
-    <a href="/admin/songs.php">Songs</a>
-    <?php endif; ?>
-    <a href="/admin/song-tags.php" class="active">Song Tags</a>
-    <a href="/admin/song-requests.php">Song Requests</a>
-    <a href="/admin/song-editor.php">Chart Editor</a>
-    <?php if ($user['role'] === 'admin'): ?>
-    <a href="/admin/placement-tests.php">Placement Tests</a>
-    <a href="/admin/investor-agreement.php">Investor Agreement</a>
-    <?php endif; ?>
-  </div>
+  <?php require __DIR__ . '/../includes/admin-nav.php'; ?>
 </div>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
@@ -214,7 +199,8 @@ function tagRow(array $t, bool $isChild): void { ?>
   <?php if (!$list): ?>
     <p class="muted">No <?= htmlspecialchars(strtolower($glabel)) ?> tags yet — drag one here or add above.</p>
   <?php else: ?>
-    <table class="table">
+    <div class="table-scroll">
+    <table class="data-table">
       <thead><tr><th>Tag</th><th>Used by</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>
       <?php foreach ($list as $t): ?>
@@ -223,6 +209,7 @@ function tagRow(array $t, bool $isChild): void { ?>
       <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   <?php endif; ?>
   </div>
 <?php endforeach; ?>

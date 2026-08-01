@@ -73,7 +73,6 @@ p  { margin-bottom: .75rem; }
   color: var(--text);
   text-decoration: none;
 }
-.drum-icon { margin-right: .3rem; }
 /* Full brand name by default; the short "ZADA" swaps in on mobile (see media query). */
 .brand-abbr { display: none; }
 .nav-links  { display: flex; gap: 1.25rem; list-style: none; flex: 1; }
@@ -165,6 +164,11 @@ textarea { resize: vertical; min-height: 100px; }
 .alert-error   { background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.3);  color: #fca5a5; }
 .alert-warning { background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.3); color: #fcd34d; }
 .alert-info    { background: rgba(56,189,248,.12); border: 1px solid rgba(56,189,248,.3); color: #7dd3fc; }
+.beta-banner-close {
+  background: none; border: none; color: inherit; opacity: .75; cursor: pointer;
+  font-size: 1.1rem; line-height: 1; margin-left: .6rem; vertical-align: middle;
+}
+.beta-banner-close:hover { opacity: 1; }
 
 /* ── Badges ───────────────────────────────────────────────── */
 .badge {
@@ -233,6 +237,51 @@ textarea { resize: vertical; min-height: 100px; }
 .row-inactive td { opacity: .5; }
 .row-actions { display: flex; gap: .5rem; }
 
+/* ── Support chatbot widget ──────────────────────────────────── */
+.chatbot-widget { position: fixed; right: 0; bottom: 5.5rem; z-index: 200; }
+.chatbot-toggle {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  padding: .7rem .45rem; border-radius: .6rem 0 0 .6rem;
+  background: var(--accent); color: #fff; border: none;
+  font-size: .82rem; font-weight: 600; letter-spacing: .02em; cursor: pointer;
+  box-shadow: -3px 3px 14px rgba(0,0,0,.3);
+}
+.chatbot-toggle:hover { background: var(--accent2); }
+.chatbot-panel {
+  position: absolute; right: 0; bottom: 0;
+  width: min(340px, calc(100vw - 1.5rem)); height: min(460px, calc(100vh - 8rem));
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.chatbot-panel[hidden] { display: none; }
+.chatbot-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .7rem 1rem; border-bottom: 1px solid var(--border);
+  font-weight: 600; color: var(--text);
+}
+.chatbot-close { background: none; border: none; color: var(--text-dim); font-size: 1.3rem; cursor: pointer; line-height: 1; }
+.chatbot-close:hover { color: var(--text); }
+.chatbot-messages { flex: 1; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+.chatbot-msg { max-width: 85%; padding: .5rem .75rem; border-radius: .8rem; font-size: .88rem; line-height: 1.4; white-space: pre-wrap; }
+.chatbot-msg--bot  { align-self: flex-start; background: var(--bg3); color: var(--text); border-bottom-left-radius: .2rem; }
+.chatbot-msg--user { align-self: flex-end;   background: var(--accent); color: #fff; border-bottom-right-radius: .2rem; }
+.chatbot-msg--typing { opacity: .6; }
+.chatbot-form { display: flex; gap: .5rem; padding: .6rem; border-top: 1px solid var(--border); }
+.chatbot-form input[type="text"] { flex: 1; }
+
+/* ── Star-rating widget ────────────────────────────────────── */
+.rating-widget { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.rating-label { color: var(--text-dim); font-size: .88rem; }
+.rating-stars { display: inline-flex; gap: .15rem; }
+.rating-star {
+  background: none; border: none; cursor: pointer; padding: .1rem;
+  font-size: 1.2rem; line-height: 1; color: var(--text-dim);
+}
+.rating-star.is-filled { color: #fbbf24; }
+.rating-star:hover { color: #fbbf24; }
+.rating-thanks { font-size: .85rem; color: var(--success); }
+
 /* ── Status messages ──────────────────────────────────────── */
 .status-msg { padding: .4rem 0; font-size: .9rem; min-height: 1.4rem; }
 .status-success { color: var(--success); }
@@ -289,7 +338,7 @@ textarea { resize: vertical; min-height: 100px; }
   html { font-size: 15px; }
   .container { padding: 1.5rem 1rem; }
 
-  /* Shorten the brand to "ZADA" on phones. */
+  /* Shorten the brand to "GrooveQuest" on phones. */
   .brand-name { display: none; }
   .brand-abbr { display: inline; }
   .form-row { grid-template-columns: 1fr; }

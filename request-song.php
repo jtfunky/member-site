@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/song_requests.php';
 require_once __DIR__ . '/includes/maya.php';
+require_once __DIR__ . '/includes/ratings.php';
 
 $user = requireLogin();
 requireProfileComplete($user);   // self-signups finish their profile first
@@ -43,21 +44,21 @@ $STATUS = [
     'paid'      => ['label' => 'Paid — charting soon',  'cls' => 'info'],
     'fulfilled' => ['label' => 'Ready to play',         'cls' => 'ok'],
 ];
-$priceLabel = SONG_REQUEST_CURRENCY . ' ' . number_format((float) SONG_REQUEST_PRICE, 2);
-
 $pageTitle = 'Request a Song — ' . SITE_NAME;
 $pageCss   = ['main', 'dashboard'];
 $showNav   = true;
+$pageHead  = '<meta name="csrf-token" content="' . htmlspecialchars(csrfToken()) . '">';
 require __DIR__ . '/includes/header.php';
 ?>
 
 <main class="container">
 <h1>Request a Song</h1>
 <p class="text-muted">
-  Paste a YouTube link to the song you want to drum to. We’ll chart it for you — once paid,
-  it’s <strong>yours to play</strong> in the game (and anyone else who buys the same song).
-  Price per request: <strong><?= htmlspecialchars($priceLabel) ?></strong>.
+  Paste a YouTube link to the song you want to drum to. We’ll chart it for you.
   We may decline songs that can’t be charted well for the app.
+  <?php if (songRequestsAreFree()): ?>
+    <br><strong>Free during the beta</strong> — no payment needed until September.
+  <?php endif; ?>
 </p>
 
 <?php if ($message): ?><div class="alert alert-success"><?= htmlspecialchars($message) ?></div><?php endif; ?>
@@ -73,6 +74,7 @@ require __DIR__ . '/includes/header.php';
   <div class="form-group">
     <label for="title">Song title (optional)</label>
     <input type="text" id="title" name="title" maxlength="200" placeholder="Song — Artist">
+    <span id="title-autofill-hint" class="text-muted" style="font-size:.78rem; display:none">Filled in from the video — edit if it’s not quite right.</span>
   </div>
   <div class="form-group">
     <label for="note">Note to admin (optional)</label>
@@ -85,7 +87,8 @@ require __DIR__ . '/includes/header.php';
 <?php if (!$requests): ?>
   <p class="text-muted">You haven’t requested any songs yet.</p>
 <?php else: ?>
-  <table class="table">
+  <div class="table-scroll">
+  <table class="data-table">
     <thead><tr><th>Song</th><th>Requested</th><th>Status</th></tr></thead>
     <tbody>
     <?php foreach ($requests as $r):
@@ -98,7 +101,7 @@ require __DIR__ . '/includes/header.php';
             <div class="text-muted" style="font-size:.8rem">Reason: <?= htmlspecialchars($r['decline_reason']) ?></div>
           <?php endif; ?>
         </td>
-        <td class="text-muted" style="font-size:.85rem"><?= htmlspecialchars(date('M j, Y', strtotime($r['created_at']))) ?></td>
+        <td class="text-muted" style="font-size:.85rem"><?= htmlspecialchars(formatManilaDate($r['created_at'])) ?></td>
         <td>
           <span class="req-status req-<?= $s['cls'] ?>"><?= htmlspecialchars($s['label']) ?></span>
           <?php if ($r['status'] === 'approved'): ?>
@@ -120,7 +123,10 @@ require __DIR__ . '/includes/header.php';
     <?php endforeach; ?>
     </tbody>
   </table>
+  </div>
 <?php endif; ?>
+
+<div style="margin-top:1.5rem"><?= ratingWidget((int) $user['id'], 'request-song', '', 'Rate this page') ?></div>
 </main>
 
 <style>
@@ -130,4 +136,6 @@ require __DIR__ . '/includes/header.php';
   .req-warn { background:rgba(245,158,11,.15); color:#fcd34d; }
   .req-err  { background:rgba(239,68,68,.15);  color:#f87171; }
 </style>
+<script src="/assets/js/request-song.js?v=<?= @filemtime(__DIR__ . '/assets/js/request-song.js') ?: 1 ?>"></script>
+<script src="/assets/js/rating-widget.js?v=<?= @filemtime(__DIR__ . '/assets/js/rating-widget.js') ?: 1 ?>"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

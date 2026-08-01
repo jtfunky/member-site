@@ -17,6 +17,35 @@ function sendMail(string $to, string $subject, string $body): bool {
     return @mail($to, $subject, $body, $headers);
 }
 
+// Same as sendMail(), plus a single file attachment (e.g. a raffle ticket
+// PDF) — hand-built MIME multipart/mixed, since PHP's mail() has no native
+// attachment support and this codebase avoids adding a mail library for one
+// feature. attachmentPath must be readable on disk; silently fails (like
+// sendMail()) rather than throwing, since notifications are best-effort.
+function sendMailWithAttachment(string $to, string $subject, string $body, string $attachmentPath, string $attachmentName): bool {
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+    if (!is_readable($attachmentPath)) return false;
+
+    $boundary = md5(uniqid('', true));
+    $headers  = 'From: ' . SITE_NAME . ' <' . mailFrom() . ">\r\n"
+              . "MIME-Version: 1.0\r\n"
+              . "Content-Type: multipart/mixed; boundary=\"{$boundary}\"";
+
+    $fileContent = chunk_split(base64_encode(file_get_contents($attachmentPath)));
+
+    $message  = "--{$boundary}\r\n";
+    $message .= "Content-Type: text/plain; charset=UTF-8\r\n\r\n";
+    $message .= $body . "\r\n\r\n";
+    $message .= "--{$boundary}\r\n";
+    $message .= "Content-Type: application/pdf; name=\"{$attachmentName}\"\r\n";
+    $message .= "Content-Transfer-Encoding: base64\r\n";
+    $message .= "Content-Disposition: attachment; filename=\"{$attachmentName}\"\r\n\r\n";
+    $message .= $fileContent . "\r\n";
+    $message .= "--{$boundary}--";
+
+    return @mail($to, $subject, $message, $headers);
+}
+
 // Emails of active admin accounts (recipients for staff notifications).
 function adminEmails(): array {
     try {
@@ -42,8 +71,9 @@ function signupCcEmails(): array {
     ));
 }
 
-// New-registration/enrollment notification: all active admins + the NOTIFY_CC list.
+// New-registration/enrollment notification: the registration inbox + the
+// NOTIFY_CC list (not admin accounts' personal emails).
 function notifySignup(string $subject, string $body): void {
-    notifyAdmins($subject, $body);
+    sendMail(defined('REGISTRATION_EMAIL') ? REGISTRATION_EMAIL : 'registration@zachalcasid.com', $subject, $body);
     foreach (signupCcEmails() as $to) sendMail($to, $subject, $body);
 }

@@ -1,5 +1,5 @@
-import { getSharedCtx, getRecordDestination } from './audio-context.js?v=20260720c';
-import { playDrumSample } from './drum-samples.js?v=20260720j';
+import { getSharedCtx, getRecordDestination, getMasterGain } from './audio-context.js?v=20260727';
+import { playDrumSample } from './drum-samples.js?v=20260727';
 
 // atTime: an explicit AudioContext time to start at (defaults to "right now").
 // Real recorded hit if that lane's sample has finished loading; otherwise the
@@ -24,7 +24,7 @@ export function playHitClick(lane, atTime) {
     env.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
 
     osc.connect(env);
-    env.connect(ac.destination);
+    env.connect(getMasterGain());
     env.connect(getRecordDestination());
     osc.start(t);
     osc.stop(t + 0.04);
@@ -40,7 +40,7 @@ export function playCountdownBeep(high = false) {
     env.gain.setValueAtTime(0.3, ac.currentTime);
     env.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.1);
     osc.connect(env);
-    env.connect(ac.destination);
+    env.connect(getMasterGain());
     env.connect(getRecordDestination());
     osc.start(ac.currentTime);
     osc.stop(ac.currentTime + 0.1);
@@ -66,7 +66,7 @@ export function scheduleMetronomeClick(atTime, accent = false) {
     env.gain.setValueAtTime(accent ? 0.22 : 0.15, atTime);
     env.gain.exponentialRampToValueAtTime(0.0005, atTime + 0.03);
     osc.connect(env);
-    env.connect(ac.destination);
+    env.connect(getMasterGain());
     env.connect(getRecordDestination());
     osc.start(atTime);
     osc.stop(atTime + 0.03);

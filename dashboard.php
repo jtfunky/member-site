@@ -15,9 +15,32 @@ requirePlacementTest($user); // new signups take the placement test before conte
 
 $hasAccess = hasPremiumAccess($user);
 $days     = getDaysRemaining($user);
+
+// The beta free-access rule (see gameLaunchFreeAccessUntil()) can guarantee
+// Groove Quest access past the account's own trial/subscription expiry —
+// show that later date instead of the raw trial countdown when it applies,
+// so "days remaining" reflects when access actually ends, not just the
+// shorter of the two numbers.
+if ($hasAccess) {
+    $betaUntil = gameLaunchFreeAccessUntil($user);
+    if ($betaUntil) {
+        $rawUntil = $user['access_expires_at'] ? new DateTime($user['access_expires_at'], new DateTimeZone('UTC')) : null;
+        if (!$rawUntil || $betaUntil > $rawUntil) {
+            $now  = new DateTime('now', new DateTimeZone('UTC'));
+            $days = max($days, (int) ceil(($betaUntil->getTimestamp() - $now->getTimestamp()) / 86400));
+        }
+    }
+}
 $currency = $user['currency'] ?: getUserCurrency();
 $price    = formatPrice(getPrice($currency), $currency);
 $welcome  = isset($_GET['welcome']);
+
+// Membership tile hidden site-wide during the free beta — reappears 1 week
+// before GAME_FREE_ACCESS_UNTIL, the beta's shared free-access end date. The
+// "expires in X days / cancel before renewal" alert above is untouched, so
+// existing subscribers can still cancel even while this tile is hidden.
+$membershipTileVisible = (new DateTime('now', new DateTimeZone('UTC')))
+    >= (new DateTime(GAME_FREE_ACCESS_UNTIL, new DateTimeZone('Asia/Manila')))->modify('-7 days');
 
 // Web-access-only students don't have one-on-one sessions; session students do.
 $student = null;
@@ -27,6 +50,15 @@ try {
     $student = $st->fetch() ?: null;
 } catch (\Throwable $e) { /* students table optional */ }
 $hasSessions = studentHasSessions($student);
+
+// "Groove Quest" segment: self-registered users with no one-on-one enrollment
+// at all. Admins and real one-on-one students keep the classic header nav
+// (see includes/nav.php) and don't need these duplicated here as tiles.
+$isGrooveQuestUser = ($user['role'] === 'user') && !$hasSessions;
+$showLaunchGated = ($user['role'] === 'admin')
+    || isGameBetaBypassEmail($user['email'] ?? '')
+    || gameBetaHasLaunched();
+$takenPlacement = hasTakenPlacementTest((int) $user['id']);
 
 $pageTitle = 'Dashboard — ' . SITE_NAME;
 $pageCss   = ['main', 'dashboard'];
@@ -72,10 +104,33 @@ require __DIR__ . '/includes/header.php';
 
   <a href="<?= $hasAccess ? '/game.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
     <div class="tile-icon"><i class="ti ti-player-play" aria-hidden="true"></i></div>
-    <h3>Drum Game</h3>
+    <h3>Groove Quest</h3>
     <p>Play songs with your e-drum kit or acoustic drums</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
   </a>
+
+  <?php if ($isGrooveQuestUser && $showLaunchGated): ?>
+  <a href="<?= $hasAccess ? '/request-song.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
+    <div class="tile-icon"><i class="ti ti-music" aria-hidden="true"></i></div>
+    <h3>Request a Song</h3>
+    <p>Ask for a track to be added to the game</p>
+    <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
+  </a>
+  <?php endif; ?>
+
+  <?php if ($isGrooveQuestUser && !$takenPlacement): ?>
+  <a href="/placement-test.php" class="tile">
+    <div class="tile-icon"><i class="ti ti-clipboard" aria-hidden="true"></i></div>
+    <h3>Placement Test</h3>
+    <p>Find your starting skill level</p>
+  </a>
+  <?php elseif ($isGrooveQuestUser && $showLaunchGated): ?>
+  <a href="/my-plan.php" class="tile">
+    <div class="tile-icon"><i class="ti ti-clipboard" aria-hidden="true"></i></div>
+    <h3>My Plan</h3>
+    <p>Your personalized practice plan</p>
+  </a>
+  <?php endif; ?>
 
   <a href="<?= $hasAccess ? '/profile.php' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
     <div class="tile-icon"><i class="ti ti-user" aria-hidden="true"></i></div>
@@ -84,11 +139,19 @@ require __DIR__ . '/includes/header.php';
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
   </a>
 
+  <?php if (!$isGrooveQuestUser): ?>
   <a href="<?= $hasAccess ? '/exclusive/' : '/payment.php' ?>" class="tile <?= $hasAccess ? '' : 'tile--locked' ?>">
     <div class="tile-icon"><i class="ti ti-star" aria-hidden="true"></i></div>
     <h3>Exclusive Content</h3>
     <p>Member-only lessons and resources</p>
     <?php if (!$hasAccess): ?><span class="badge-locked">Members Only</span><?php endif; ?>
+  </a>
+  <?php endif; ?>
+
+  <a href="/profile.php#referral" class="tile">
+    <div class="tile-icon"><i class="ti ti-users" aria-hidden="true"></i></div>
+    <h3>Refer a Friend</h3>
+    <p>Get <?= REFERRAL_REWARD_DAYS ?> free days for every signup through your link</p>
   </a>
 
   <?php if ($hasAccess && $hasSessions): ?>
@@ -102,7 +165,7 @@ require __DIR__ . '/includes/header.php';
   </a>
   <?php endif; ?>
 
-  <?php if (!$hasAccess || $days <= CANCEL_WINDOW_DAYS): ?>
+  <?php if ($membershipTileVisible && (!$hasAccess || $days <= CANCEL_WINDOW_DAYS)): ?>
   <a href="/payment.php" class="tile tile--cta">
     <div class="tile-icon"><i class="ti ti-credit-card" aria-hidden="true"></i></div>
     <h3><?= $hasAccess ? 'Manage Membership' : 'Activate Membership' ?></h3>

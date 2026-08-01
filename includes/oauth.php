@@ -195,6 +195,12 @@ function oauthLoginOrCreate(string $key, array $profile): array|string {
     if ($user = $st->fetch()) {
         if (!$user['is_active']) return 'This account has been deactivated.';
         oauthLink((int) $user['id'], $key, $profile);
+        // The provider just proved this email is real (checked above) — that's
+        // stronger proof than our own link, so upgrade an unverified account.
+        if (empty($user['email_verified_at'])) {
+            $db->prepare('UPDATE users SET email_verified_at = NOW() WHERE id = ?')->execute([$user['id']]);
+            $user['email_verified_at'] = date('Y-m-d H:i:s');
+        }
         loginById((int) $user['id']);
         return $user;
     }
@@ -221,11 +227,13 @@ function oauthCreateUser(string $key, array $profile): int {
     $currency = function_exists('getUserCurrency') ? getUserCurrency() : 'USD';
 
     // password_hash = '' marks a social-only account (password sign-in is blocked
-    // until they set one via Forgot Password).
+    // until they set one via Forgot Password). email_verified_at is set
+    // immediately — the provider already confirmed this email (checked by the
+    // caller before we get here), so there's no address to verify.
     db()->prepare(
-        'INSERT INTO users (username, email, password_hash, first_name, last_name,
+        'INSERT INTO users (username, email, email_verified_at, password_hash, first_name, last_name,
          role, registration_type, subscription_status, access_expires_at, currency)
-         VALUES (?, ?, "", ?, ?, "user", "self", "trial", ?, ?)'
+         VALUES (?, ?, NOW(), "", ?, ?, "user", "self", "trial", ?, ?)'
     )->execute([$username, $profile['email'], $profile['first'], $profile['last'], $expires, $currency]);
     $userId = (int) db()->lastInsertId();
 

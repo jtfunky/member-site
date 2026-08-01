@@ -6,6 +6,7 @@
 // effectively free.
 let ctx = null;
 let recordDest = null;
+let masterGain = null;
 
 export function getSharedCtx() {
   // A numeric latencyHint of 0 asks for the smallest buffer the hardware will
@@ -26,4 +27,21 @@ export function getSharedCtx() {
 export function getRecordDestination() {
   if (!recordDest) recordDest = getSharedCtx().createMediaStreamDestination();
   return recordDest;
+}
+
+// Single volume control for everything the player hears (hit SFX, metronome,
+// backing track) — every sound-producing node connects here instead of
+// straight to ctx.destination. Deliberately NOT in the getRecordDestination()
+// path, so a played-back recording always captures full volume regardless of
+// what the player happened to have their own playback volume set to.
+export function getMasterGain() {
+  if (!masterGain) {
+    masterGain = getSharedCtx().createGain();
+    masterGain.connect(getSharedCtx().destination);
+  }
+  return masterGain;
+}
+
+export function setMasterVolume(v) {
+  getMasterGain().gain.value = Math.max(0, Math.min(1, v));
 }

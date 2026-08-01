@@ -88,6 +88,14 @@ export function isPlaying()     { return !!(window.YT && getState() === YT.Playe
 export function isEnded()       { return !!(window.YT && getState() === YT.PlayerState.ENDED); }
 // Practice speeds (1 / 0.75 / 0.5) — supported natively by the player.
 export function setRate(r) { try { if (player && player.setPlaybackRate) player.setPlaybackRate(r); } catch (e) {} }
+// The embedded YouTube player has its own separate audio pipeline (an
+// iframe, not decoded through our AudioContext), so the master gain node in
+// audio-context.js can't reach it — this is the only way the volume slider
+// can affect a YouTube-backed song. pct: 0-100.
+export function setVolume(pct) { try { if (player && player.setVolume) player.setVolume(Math.max(0, Math.min(100, pct))); } catch (e) {} }
+// Practice-mode scrubbing — standard IFrame API method, well-supported.
+// `true` = allowSeekAhead, so it seeks even into not-yet-buffered parts.
+export function seekTo(seconds) { try { if (player && player.seekTo) player.seekTo(seconds, true); } catch (e) {} }
 export function pause()  { try { if (player) player.pauseVideo(); } catch (e) {} }
 export function resume() { try { if (player) player.playVideo(); }  catch (e) {} }
 export function stop()   { try { if (player) player.stopVideo(); }  catch (e) {} }

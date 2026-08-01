@@ -43,6 +43,7 @@ tar czf "$TARBALL" \
     --exclude='_opcache-check.php' \
     --exclude='_diag.php' \
     --exclude='_min.php' \
+    --exclude='_local-preview-*.html' \
     --exclude='signuptest.php' \
     --exclude='*.exe' \
     --exclude='DEPLOY*.md' \

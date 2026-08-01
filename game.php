@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $user = requireLogin();
+requireGameLaunched($user);    // hard-blocks the whole game before the beta launch date
 requireProfileComplete($user); // self-signups must finish their profile first
 // The placement test is a one-time assessment — block re-entering test mode once taken.
 if (!empty($_GET['test']) && ($user['role'] ?? '') !== 'admin' && hasTakenPlacementTest((int) $user['id'])) {
@@ -11,10 +12,16 @@ if (!empty($_GET['test']) && ($user['role'] ?? '') !== 'admin' && hasTakenPlacem
 requirePlacementTest($user);   // new signups take the placement test first (self-allows ?test=1)
 // The placement test (?test=1) — and the tutorial shown before a student's
 // first attempt (?tutorial=1) — are open to any enrolled student regardless
-// of membership status. The full game (song library) stays members-only.
-if (empty($_GET['test']) && empty($_GET['tutorial'])) requirePremium($user);
+// of membership status. The full game (song library) stays members-only,
+// with launch-period free/trial access folded in via requireGameAccess().
+if (empty($_GET['test']) && empty($_GET['tutorial'])) requireGameAccess($user);
 
-$pageTitle = 'Drum Game — ' . SITE_NAME;
+// First-time "how to play" walkthrough — only on a normal session (not the
+// focused test/tutorial/practice-plan flows, which have their own single
+// purpose), and only once per account (users.game_intro_seen_at).
+$showGameIntro = empty($_GET['test']) && empty($_GET['tutorial']) && empty($_GET['plan']) && empty($user['game_intro_seen_at']);
+
+$pageTitle = 'Groove Quest — ' . SITE_NAME;
 $pageCss   = ['game'];
 $bodyClass = 'game-body';
 // Web-app meta so "Add to Home Screen" launches the game full-screen (no browser
@@ -72,6 +79,40 @@ require __DIR__ . '/includes/header.php';
   .recent-grade { font-weight: 700; color: #facc15; min-width: 1.2rem; text-align: center; }
   .recent-score { min-width: 4.5rem; text-align: right; }
   .recent-acc   { color: var(--dim); min-width: 3.5rem; text-align: right; }
+
+  /* First-time "how to play" walkthrough */
+  .intro-modal {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,.65);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+  }
+  .intro-card {
+    position: relative;
+    background: #17172a;
+    border: 1px solid #2c2c44;
+    border-radius: 16px;
+    padding: 1.75rem;
+    max-width: 28rem;
+    width: 100%;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+  .intro-step { display: none; }
+  .intro-step.active { display: block; }
+  .intro-icon { font-size: 2rem; margin-bottom: .5rem; }
+  .intro-card h3 { margin: 0 0 .5rem; }
+  .intro-card p { color: var(--text-dim, #9ca3af); line-height: 1.5; margin: 0 0 .5rem; }
+  .intro-lanes { display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0; }
+  .intro-lane-chip {
+    display: flex; align-items: center; gap: .35rem;
+    background: rgba(255,255,255,.06); border-radius: 99px;
+    padding: .25rem .65rem .25rem .5rem; font-size: .78rem;
+  }
+  .intro-lane-dot { width: .6rem; height: .6rem; border-radius: 50%; flex: none; }
+  .intro-dots { display: flex; gap: .4rem; justify-content: center; margin: 1.25rem 0 1rem; }
+  .intro-dot { width: .5rem; height: .5rem; border-radius: 50%; background: rgba(255,255,255,.2); }
+  .intro-dot.active { background: #8b5cf6; }
+  .intro-actions { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
 </style>
 
 <!-- ── Rotate overlay (portrait mobile/tablet) ──────────── -->
@@ -85,7 +126,7 @@ require __DIR__ . '/includes/header.php';
 
 <div id="screen-menu" class="screen active">
   <div class="menu-header">
-    <h1><i class="ti ti-music" aria-hidden="true"></i> <?= SITE_NAME ?></h1>
+    <h1><?= SITE_NAME ?></h1>
     <div class="menu-user">
       <?= htmlspecialchars($user['first_name'] ?: $user['username']) ?>
       <a href="/dashboard.php" class="btn btn-ghost btn-sm">Dashboard</a>
@@ -124,6 +165,7 @@ require __DIR__ . '/includes/header.php';
          E-Drum Kit is chosen; only needed if a pad doesn't register by default. -->
     <div id="padmap-wrap" style="display:none; margin-top:.75rem;">
       <button id="padmap-toggle" class="btn btn-ghost btn-sm"><i class="ti ti-adjustments" aria-hidden="true"></i> Map pads</button>
+      <a href="https://youtu.be/qGaR57B4R0s" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><i class="ti ti-brand-youtube" aria-hidden="true"></i> How to map pads</a>
       <div id="pad-map" class="acoustic-cal" style="display:none">
         <p class="field-hint">Only needed if a drum doesn't register: click <strong>Assign</strong>, then strike that pad on your kit once. Saved on this device.</p>
         <div id="padmap-list" class="cal-list"></div>
@@ -136,6 +178,11 @@ require __DIR__ . '/includes/header.php';
 
   <div id="song-library" class="song-library" style="display:none">
     <h2>Song Library</h2>
+    <div id="volume-row" class="speed-row">
+      <label for="volume-slider">Volume</label>
+      <input type="range" id="volume-slider" min="0" max="100" step="1" value="80">
+      <span id="volume-label">80%</span>
+    </div>
     <div id="speed-row" class="speed-row">
       <label for="play-rate">Speed</label>
       <div class="speed-scrubber">
@@ -159,6 +206,42 @@ require __DIR__ . '/includes/header.php';
   </div>
 
   <div id="recent-plays" class="recent-plays" style="display:none"></div>
+</div>
+
+<div id="intro-modal" class="intro-modal" style="display:none">
+  <div class="intro-card">
+    <div class="intro-step active" data-step="0">
+      <div class="intro-icon">🥁</div>
+      <h3>Welcome to <?= SITE_NAME ?>!</h3>
+      <p>Quick 30-second tour before you dive in — here's how it works.</p>
+    </div>
+    <div class="intro-step" data-step="1">
+      <div class="intro-icon"><i class="ti ti-usb" aria-hidden="true"></i></div>
+      <h3>Choose your input</h3>
+      <p>Got an e-drum kit? Plug it in over USB. Playing on a real acoustic kit instead? Use your mic — the app listens for each hit.</p>
+    </div>
+    <div class="intro-step" data-step="2">
+      <div class="intro-icon"><i class="ti ti-music" aria-hidden="true"></i></div>
+      <h3>Hit the notes as they arrive</h3>
+      <p>Each lane is a different drum or cymbal, color-coded so you can tell them apart at a glance:</p>
+      <div class="intro-lanes" id="intro-lanes"></div>
+    </div>
+    <div class="intro-step" data-step="3">
+      <div class="intro-icon"><i class="ti ti-trophy" aria-hidden="true"></i></div>
+      <h3>Score &amp; combo</h3>
+      <p>Hit notes right on time for the best grade. Chain hits together without missing to build a combo multiplier — miss a note and the combo resets.</p>
+    </div>
+    <div class="intro-step" data-step="4">
+      <div class="intro-icon"><i class="ti ti-playlist" aria-hidden="true"></i></div>
+      <h3>Pick a song and play</h3>
+      <p>Once your input is armed, the Song Library unlocks below. Pick any track, hit Play, and start grooving!</p>
+    </div>
+    <div class="intro-dots" id="intro-dots"></div>
+    <div class="intro-actions">
+      <button type="button" id="intro-skip" class="btn btn-ghost btn-sm">Skip</button>
+      <button type="button" id="intro-next" class="btn btn-primary btn-sm">Next</button>
+    </div>
+  </div>
 </div>
 
 <div id="screen-settings" class="screen">
@@ -226,12 +309,17 @@ require __DIR__ . '/includes/header.php';
       <div id="judgment-popup" class="judgment-popup"></div>
     </div>
     <div class="side-panel" id="side-panel">
-      <!-- YouTube casual-mode player fills this panel when a song has a video.
-           The IFrame API replaces #yt-player with an <iframe>. -->
-      <div id="yt-stage" class="yt-stage"><div id="yt-player"></div></div>
-      <div id="yt-loading" class="yt-loading" hidden>
-        Loading video… <span>a YouTube ad may play first — the song starts right after</span>
+      <div class="yt-stage-wrap">
+        <!-- YouTube casual-mode player fills this wrapper when a song has a
+             video. The IFrame API replaces #yt-player with an <iframe>. -->
+        <div id="yt-stage" class="yt-stage"><div id="yt-player"></div></div>
+        <div id="yt-loading" class="yt-loading" hidden>
+          Loading video… <span>a YouTube ad may play first — the song starts right after</span>
+        </div>
       </div>
+      <!-- Live top-scores for the current song — shown alongside the video,
+           so it only has real content in YouTube mode (see main.js). -->
+      <div id="leaderboard-live" class="leaderboard-panel"></div>
     </div>
   </div>
 </div>
@@ -258,6 +346,18 @@ require __DIR__ . '/includes/header.php';
       <tr><td>Max Combo</td><td id="r-combo"></td></tr>
     </table>
     <div id="results-ai" class="results-ai" style="display:none"></div>
+    <div id="song-rating" class="rating-widget" data-context="song" data-ref-id="" style="display:none">
+      <span class="rating-label">Rate this song</span>
+      <span class="rating-stars">
+        <button type="button" class="rating-star" data-value="1" aria-label="1 star"><i class="ti tif ti-star" aria-hidden="true"></i></button>
+        <button type="button" class="rating-star" data-value="2" aria-label="2 stars"><i class="ti tif ti-star" aria-hidden="true"></i></button>
+        <button type="button" class="rating-star" data-value="3" aria-label="3 stars"><i class="ti tif ti-star" aria-hidden="true"></i></button>
+        <button type="button" class="rating-star" data-value="4" aria-label="4 stars"><i class="ti tif ti-star" aria-hidden="true"></i></button>
+        <button type="button" class="rating-star" data-value="5" aria-label="5 stars"><i class="ti tif ti-star" aria-hidden="true"></i></button>
+      </span>
+      <span class="rating-thanks" style="display:none">Thanks for your feedback!</span>
+    </div>
+    <div id="leaderboard-results" class="leaderboard-panel"></div>
     <button id="btn-retry"   class="btn btn-primary">Retry</button>
     <button id="btn-to-menu" class="btn btn-ghost">Menu</button>
   </div>
@@ -265,7 +365,7 @@ require __DIR__ . '/includes/header.php';
 
 <button id="btn-settings" class="fab-settings" title="Settings" aria-label="Settings"><i class="ti ti-settings" aria-hidden="true"></i></button>
 
-<div id="game-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" hidden></div>
+<div id="game-config" data-csrf="<?= htmlspecialchars(csrfToken()) ?>" data-first-name="<?= htmlspecialchars($user['first_name'] ?? '') ?>" data-show-intro="<?= $showGameIntro ? '1' : '0' ?>" hidden></div>
 <?php if (!empty($_GET['test'])): ?>
 <div id="drum-test-config" data-pad="<?= !empty($_GET['pad']) ? '1' : '0' ?>" hidden></div>
 <?php endif; ?>
@@ -278,5 +378,7 @@ require __DIR__ . '/includes/header.php';
 <?php if (($user['email'] ?? '') === 'bongalcasid+keytest@gmail.com'): ?>
 <div id="keyboard-test-config" hidden></div>
 <?php endif; ?>
-<script type="module" src="/assets/js/game/main.js?v=20260814"></script>
+<script src="/assets/js/rating-widget.js?v=<?= @filemtime(__DIR__ . '/assets/js/rating-widget.js') ?: 1 ?>"></script>
+<script type="module" src="/assets/js/game-intro-tour.js?v=<?= @filemtime(__DIR__ . '/assets/js/game-intro-tour.js') ?: 1 ?>"></script>
+<script type="module" src="/assets/js/game/main.js?v=20260731c"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -98,6 +98,97 @@ function hasTakenPlacementTest(int $userId): bool {
     }
 }
 
+// True once "now" (Asia/Manila) has reached the game's beta launch date.
+function gameBetaHasLaunched(): bool {
+    $now    = new \DateTime('now', new \DateTimeZone('UTC'));
+    $launch = new \DateTime(GAME_BETA_LAUNCH_AT, new \DateTimeZone('Asia/Manila'));
+    return $now >= $launch;
+}
+
+// GAME_BETA_BYPASS_EMAIL may hold one email or a comma-separated list, so
+// QA can add temporary test accounts without touching code — just the
+// config constant on the server.
+function isGameBetaBypassEmail(string $email): bool {
+    foreach (explode(',', GAME_BETA_BYPASS_EMAIL) as $candidate) {
+        if ($email !== '' && strcasecmp($email, trim($candidate)) === 0) return true;
+    }
+    return false;
+}
+
+// Hard-gates the whole game behind the beta launch date — nothing in
+// game.php is reachable before it, not even the placement test/tutorial.
+// Admins and the designated test account(s) always get through.
+function requireGameLaunched(array $user): void {
+    if (($user['role'] ?? '') === 'admin') return;
+    if (isGameBetaBypassEmail($user['email'] ?? '')) return;
+    if (gameBetaHasLaunched()) return;
+
+    header('Location: ' . SITE_URL . '/game-coming-soon.php');
+    exit;
+}
+
+// Free/trial access to the game specifically, computed purely from the
+// user's own registration date — independent of hasPremiumAccess(), which
+// stays scoped to real paid subscriptions. Registering before
+// GAME_FREE_ACCESS_CUTOFF grants free access through GAME_FREE_ACCESS_UNTIL;
+// registering on/after it grants a flat GAME_LAUNCH_TRIAL_DAYS-day trial
+// from the registration date instead.
+// The date the beta free-access rule covers this user until — same two-tier
+// logic hasGameLaunchFreeAccess() checks against "now", exposed separately
+// so callers (e.g. the dashboard) can display the actual date rather than
+// just a yes/no.
+function gameLaunchFreeAccessUntil(array $user): ?\DateTime {
+    if (empty($user['created_at'])) return null;
+
+    $regTime = new \DateTime($user['created_at'], new \DateTimeZone('UTC'));
+    $cutoff  = new \DateTime(GAME_FREE_ACCESS_CUTOFF, new \DateTimeZone('Asia/Manila'));
+
+    if ($regTime < $cutoff) {
+        return new \DateTime(GAME_FREE_ACCESS_UNTIL, new \DateTimeZone('Asia/Manila'));
+    }
+
+    return (clone $regTime)->modify('+' . GAME_LAUNCH_TRIAL_DAYS . ' days');
+}
+
+function hasGameLaunchFreeAccess(array $user): bool {
+    $until = gameLaunchFreeAccessUntil($user);
+    if (!$until) return false;
+    $now = new \DateTime('now', new \DateTimeZone('UTC'));
+    return $now <= $until;
+}
+
+// Same gate/redirect behavior as requirePremium(), except access is also
+// granted by hasGameLaunchFreeAccess() — the beta/launch free window — not
+// just a real paid subscription. Scoped to the game only; exclusive/index.php
+// and everything else keeps using plain requirePremium().
+function requireGameAccess(array $user): void {
+    $role = $user['role'] ?? 'user';
+    if ($role === 'editor' || $role === 'partner') {
+        header('Location: ' . SITE_URL . roleHome($role));
+        exit;
+    }
+    if (hasPremiumAccess($user) || hasGameLaunchFreeAccess($user)) return;
+
+    if (($user['subscription_status'] ?? '') === 'pending') {
+        header('Location: ' . SITE_URL . '/my-membership.php');
+        exit;
+    }
+
+    header('Location: ' . SITE_URL . '/payment.php');
+    exit;
+}
+
+// The post-login landing page for a regular user: game-coming-soon.php while
+// the game is gated pre-launch (the bypass account goes to dashboard as
+// normal), dashboard.php once the beta has launched. Only used as the DEFAULT
+// when no explicit deep-link (?next=) was requested — those are always honored.
+// Admins are routed by roleHome() before this is ever called.
+function defaultPostLoginRedirect(array $user): string {
+    if (($user['role'] ?? 'user') === 'admin') return roleHome('admin');
+    if (isGameBetaBypassEmail($user['email'] ?? '')) return '/dashboard.php';
+    return gameBetaHasLaunched() ? '/dashboard.php' : '/game-coming-soon.php';
+}
+
 function extendAccess(int $userId, int $days): void {
     // If already has future access, extend from that date; else extend from now
     $st = db()->prepare('SELECT access_expires_at FROM users WHERE id = ?');

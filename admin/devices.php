@@ -55,14 +55,15 @@ require __DIR__ . '/../includes/header.php';
 <?php if (!$devices): ?>
   <p class="muted">No trusted devices yet.</p>
 <?php else: ?>
-<table class="table">
+<div class="table-scroll">
+<table class="data-table">
   <thead><tr><th>Device</th><th>IP</th><th>First seen</th><th>Last used</th><th style="text-align:right">Action</th></tr></thead>
   <tbody>
   <?php foreach ($devices as $d): $cur = isCurrentAdminDevice($d); ?>
     <tr>
       <td><?= htmlspecialchars($d['label'] ?: 'Unknown device') ?><?= $cur ? ' <span class="badge">this device</span>' : '' ?></td>
       <td class="muted"><?= htmlspecialchars($d['ip'] ?: '—') ?></td>
-      <td class="muted" style="font-size:.85rem"><?= htmlspecialchars(date('M j, Y', strtotime($d['created_at']))) ?></td>
+      <td class="muted" style="font-size:.85rem"><?= htmlspecialchars(formatManilaDate($d['created_at'])) ?></td>
       <td class="muted" style="font-size:.85rem"><?= $d['last_used_at'] ? htmlspecialchars(date('M j, Y g:i A', strtotime($d['last_used_at']))) : '—' ?></td>
       <td style="text-align:right">
         <form method="POST" style="display:inline">
@@ -76,6 +77,7 @@ require __DIR__ . '/../includes/header.php';
   <?php endforeach; ?>
   </tbody>
 </table>
+</div>
 
 <form method="POST" style="margin-top:1rem">
   <?= csrfField() ?>

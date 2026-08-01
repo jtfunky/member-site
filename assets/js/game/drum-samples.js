@@ -1,4 +1,4 @@
-import { getSharedCtx, getRecordDestination } from './audio-context.js?v=20260720c';
+import { getSharedCtx, getRecordDestination, getMasterGain } from './audio-context.js?v=20260727';
 
 // Real recorded hits instead of synthesized oscillator clicks. The pack only
 // has 7 distinct samples for 10 lanes — Hi Tom 1/2 and Mid Tom share the one
@@ -88,7 +88,7 @@ export function playDrumSample(lane, atTime) {
     src.playbackRate.value = sample.rate;
     env.gain.value = 0.8;
     src.connect(env);
-    env.connect(ac.destination);
+    env.connect(getMasterGain());
     env.connect(getRecordDestination());
     src.start(atTime ?? ac.currentTime);
     return true;

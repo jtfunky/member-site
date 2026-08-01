@@ -13,6 +13,15 @@ require_once __DIR__ . '/config.php';
 if (!defined('SONG_REQUEST_PRICE'))    define('SONG_REQUEST_PRICE', 149);
 if (!defined('SONG_REQUEST_CURRENCY')) define('SONG_REQUEST_CURRENCY', 'PHP');
 if (!defined('PAYMENT_MODE'))          define('PAYMENT_MODE', 'dummy');
+if (!defined('SONG_REQUEST_FREE_UNTIL')) define('SONG_REQUEST_FREE_UNTIL', '2026-09-01 00:00:00');
+
+// True while requests are free (beta) — no payment step, straight to charting
+// once approved. Real pricing resumes automatically after SONG_REQUEST_FREE_UNTIL.
+function songRequestsAreFree(): bool {
+    $now   = new \DateTime('now', new \DateTimeZone('UTC'));
+    $until = new \DateTime(SONG_REQUEST_FREE_UNTIL, new \DateTimeZone('Asia/Manila'));
+    return $now < $until;
+}
 
 /** Extract the 11-char YouTube id from a URL (or a bare id). Null if not YouTube. */
 function parseYoutubeId(string $url): ?string {
@@ -27,12 +36,40 @@ function normalizeYoutubeUrl(string $ytId): string {
     return 'https://www.youtube.com/watch?v=' . $ytId;
 }
 
+/** True if an admin has blacklisted this video from being requested. */
+function isVideoBlacklisted(string $ytId): bool {
+    try {
+        $st = db()->prepare('SELECT 1 FROM song_request_blacklist WHERE yt_id = ?');
+        $st->execute([$ytId]);
+        return (bool) $st->fetchColumn();
+    } catch (\Throwable $e) {
+        return false; // table not migrated yet -> treat as not blacklisted
+    }
+}
+
+/** Blacklist a video so future requests for it are blocked at submission. */
+function blacklistVideo(string $ytId, string $reason, int $adminUserId): void {
+    db()->prepare(
+        'INSERT INTO song_request_blacklist (yt_id, reason, blacklisted_by)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE reason = VALUES(reason), blacklisted_by = VALUES(blacklisted_by)'
+    )->execute([$ytId, mb_substr($reason, 0, 255), $adminUserId]);
+}
+
+function unblacklistVideo(string $ytId): void {
+    db()->prepare('DELETE FROM song_request_blacklist WHERE yt_id = ?')->execute([$ytId]);
+}
+
 /**
  * Create a request (status pending). Returns [ok(bool), error(string), id(int)].
  */
 function createSongRequest(int $userId, string $rawUrl, string $title, string $note): array {
     $ytId = parseYoutubeId(trim($rawUrl));
     if (!$ytId) return [false, 'Please paste a valid YouTube link.', 0];
+
+    if (isVideoBlacklisted($ytId)) {
+        return [false, 'This video can’t be requested. Please try a different one.', 0];
+    }
 
     // Don't let the same user open a duplicate request for the same video.
     $st = db()->prepare(
@@ -43,6 +80,8 @@ function createSongRequest(int $userId, string $rawUrl, string $title, string $n
     $st->execute([$userId, $ytId]);
     if ($st->fetchColumn()) return [false, 'You already have a request for this song.', 0];
 
+    $price = songRequestsAreFree() ? 0.0 : (float) SONG_REQUEST_PRICE;
+
     $ins = db()->prepare(
         'INSERT INTO song_requests (user_id, youtube_url, yt_id, title, note, status, price, currency)
          VALUES (?, ?, ?, ?, ?, "pending", ?, ?)'
@@ -50,14 +89,22 @@ function createSongRequest(int $userId, string $rawUrl, string $title, string $n
     $ins->execute([
         $userId, normalizeYoutubeUrl($ytId), $ytId,
         mb_substr(trim($title), 0, 200), mb_substr(trim($note), 0, 500),
-        (float) SONG_REQUEST_PRICE, SONG_REQUEST_CURRENCY,
+        $price, SONG_REQUEST_CURRENCY,
     ]);
     return [true, '', (int) db()->lastInsertId()];
 }
 
+// Free-period requests skip straight to "paid" (i.e. ready to chart) since
+// there's no payment step to wait for. Paid requests go through the normal
+// "approved -> student pays -> admin marks paid" flow.
 function approveSongRequest(int $requestId): void {
-    db()->prepare("UPDATE song_requests SET status='approved', decline_reason='' WHERE id=? AND status IN ('pending','declined')")
-        ->execute([$requestId]);
+    $st = db()->prepare('SELECT price FROM song_requests WHERE id = ?');
+    $st->execute([$requestId]);
+    $price = (float) ($st->fetchColumn() ?: 0);
+
+    $newStatus = $price <= 0 ? 'paid' : 'approved';
+    db()->prepare("UPDATE song_requests SET status=?, decline_reason='' WHERE id=? AND status IN ('pending','declined')")
+        ->execute([$newStatus, $requestId]);
 }
 
 function declineSongRequest(int $requestId, string $reason): void {

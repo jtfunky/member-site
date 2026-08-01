@@ -1,14 +1,15 @@
 import { initMidi, selectInput, getInputList, onDeviceChange } from './midi.js';
 import { mapMidiEvent, setChannelFilter, setNoteMap, getDefaultMap, getLaneNames, getLaneColors } from './input.js?v=20260720a';
-import { loadSong, updateChart, getActiveNotes, findClosestNote, expireMissed, reset as resetChart } from './chart.js?v=20260702';
-import { initRenderer, resize as resizeRenderer, drawFrame, addFlash, addJudgment, drawCountdown, setSongLanes, setHighlightLane, getLaneBounds } from './renderer.js?v=20260724';
+import { loadSong, updateChart, getActiveNotes, findClosestNote, expireMissed, reset as resetChart, seekTo as seekChart } from './chart.js?v=20260729';
+import { initRenderer, resize as resizeRenderer, drawFrame, addFlash, addJudgment, drawCountdown, setSongLanes, setHighlightLane, getLaneBounds } from './renderer.js?v=20260730h';
 import { createScoreState, judgeHit, judgeMiss, calcGrade, calcAccuracy, TIMING, setPrecisionMode } from './scoring.js?v=20260724c';
-import { playCountdownBeep, resumeContext, playMetronomeClick, scheduleMetronomeClick, audioTimeFor } from './audio.js?v=20260810';
-import { loadAudioUrl, unloadAudio, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js?v=20260762';
-import * as YouTube from './youtube.js?v=20260756';
+import { playCountdownBeep, resumeContext, playMetronomeClick, scheduleMetronomeClick, audioTimeFor } from './audio.js?v=20260727';
+import { loadAudioUrl, unloadAudio, playAudio, pauseAudio, resumeAudio, stopAudio, hasAudio, getAudioDurationMs } from './audio-player.js?v=20260727';
+import { setMasterVolume } from './audio-context.js?v=20260727';
+import * as YouTube from './youtube.js?v=20260729';
 import { startAcousticDetection, stopAcousticDetection, setAcousticSensitivity, isAcousticActive,
          startCalibration, cancelCalibration, isLaneCalibrated, clearLane, startPadDetection } from './acoustic.js?v=20260709';
-import { startRecording, stopRecording, isRecording, isRecordingSupported } from './recorder.js?v=20260764';
+import { startRecording, stopRecording, isRecording, isRecordingSupported } from './recorder.js?v=20260727';
 import { song as demoSong } from './songs/demo.js?v=20260705';
 import { song as rockSong } from './songs/rock-basics.js?v=20260705';
 import { song as placementSong } from './songs/placement.js?v=20260715';
@@ -52,6 +53,7 @@ let countdownTimer   = null;
 let rafId            = null;
 let currentSong      = demoSong;
 let songDuration     = 0;   // effective length (ms) for this playthrough
+let pendingStartMs   = 0;   // practice-mode scrub position chosen before Play; 0 = from the top
 let pausedPosition   = 0;
 let nextMetroBeat    = 0; // next metronome beat index due to be scheduled (incl. the lead-in)
 let audioStarted     = false;     // audio starts when the lead-in reaches song pos 0
@@ -74,6 +76,12 @@ const HIT_OFFSET_KEY = 'drumkit_audio_offset';   // key kept so existing calibra
 // Clamp to the slider's range — a stale saved value beyond the (Normal-mode)
 // hit window would silently make every hit unregisterable.
 let hitOffsetMs = Math.max(-150, Math.min(150, parseInt(localStorage.getItem(HIT_OFFSET_KEY) || '0', 10) || 0));
+
+// Master volume (0-100), persisted per device like the offset above.
+const VOLUME_KEY = 'drumkit_volume';
+let volumePct = Math.max(0, Math.min(100, parseInt(localStorage.getItem(VOLUME_KEY) || '80', 10)));
+if (Number.isNaN(volumePct)) volumePct = 80;
+setMasterVolume(volumePct / 100);
 
 // Precision Mode: opt-in tighter timing windows. Session-only by design (not
 // persisted) so nobody gets quietly stuck on hard mode without realizing why —
@@ -121,6 +129,7 @@ let tutorialStarted = false;
 let padContext       = TEST_PAD;
 // CSRF is on #game-config (present on every game load); test config kept as marker.
 const CSRF_TOKEN     = _gameCfg ? (_gameCfg.dataset.csrf || '') : (_testCfg ? (_testCfg.dataset.csrf || '') : '');
+const MY_FIRST_NAME  = _gameCfg ? (_gameCfg.dataset.firstName || '') : ''; // for highlighting "me" on the leaderboard
 
 const canvas = document.getElementById('game-canvas');
 initRenderer(canvas);
@@ -381,6 +390,11 @@ function renderSongList() {
       : (inputMode === 'pad' ? 'Practice Pad Songs' : 'Song Library');
   }
 
+  // Practice-a-section scrubbing: free-practice songs only. Plan sessions and
+  // the placement test always run the whole thing from the top — seeking would
+  // let students skip past the part being graded/unlocked.
+  const allowScrub = !PLAN_MODE && !DRUM_TEST_MODE;
+
   songs.forEach(song => {
     const best = myBests[String(song.id)];
     const bestHtml = best
@@ -389,6 +403,22 @@ function renderSongList() {
     const item = document.createElement('div');
     item.className = 'song-item';
     const audioState = (song.youtubeUrl && !song.audioUrl) ? '<i class="ti ti-brand-youtube" aria-hidden="true"></i> plays along to YouTube (casual)' : '';
+
+    // Slider max: prefer the stored duration; fall back to the last note's
+    // time (mirrors resolveSongDuration's own fallback chain) so songs
+    // without a stored length still get a usable scrubber.
+    const scrubMaxMs = Number(song.duration) > 0
+      ? Number(song.duration)
+      : (song.notes || []).reduce((m, n) => Math.max(m, n.time), 0);
+    const scrubHtml = (allowScrub && scrubMaxMs > 0) ? `
+      <div class="song-scrub">
+        <div class="song-scrub-row">
+          <span class="song-scrub-label">Start at</span>
+          <span class="song-scrub-time">0:00</span>
+        </div>
+        <input type="range" class="song-scrub-range" min="0" max="${scrubMaxMs}" step="1000" value="0">
+      </div>` : '';
+
     item.innerHTML = `
       <div class="song-item-info">
         <strong>${escHtml(song.title)}${song.exclusive ? ' <span class="song-excl"><i class="ti tif ti-star" aria-hidden="true"></i> Exclusive</span>' : ''}</strong>
@@ -400,10 +430,57 @@ function renderSongList() {
       <div class="song-item-actions">
         <button class="btn btn-primary btn-sm song-play-btn">Play</button>
       </div>
+      ${scrubHtml}
     `;
-    item.querySelector('.song-play-btn').addEventListener('click', () => selectSong(song));
+    const range = item.querySelector('.song-scrub-range');
+    if (range) {
+      const timeLabel = item.querySelector('.song-scrub-time');
+      range.addEventListener('input', () => { timeLabel.textContent = formatClock(parseInt(range.value, 10)); });
+    }
+    item.querySelector('.song-play-btn').addEventListener('click', () => {
+      const startMs = range ? parseInt(range.value, 10) || 0 : 0;
+      selectSong(song, startMs);
+    });
     list.appendChild(item);
   });
+}
+
+function formatClock(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// ── Leaderboard (top scores per song) ──────────────────────
+// Fetches and renders into the given container id. Empty result just clears
+// the container — .leaderboard-panel:empty is hidden via CSS, so nothing
+// shows for songs with no plays yet, or when switching away from a
+// leaderboard-eligible context (e.g. a hosted-audio song's #leaderboard-live).
+async function loadLeaderboard(containerId, songId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!songId) { el.innerHTML = ''; return; }
+  try {
+    const res  = await fetch('/api/leaderboard.php?song_id=' + encodeURIComponent(songId));
+    const data = await res.json();
+    renderLeaderboard(el, data.leaders || []);
+  } catch (e) {
+    el.innerHTML = ''; // offline/error — just hide the panel, not worth surfacing
+  }
+}
+
+function renderLeaderboard(el, leaders) {
+  if (!leaders.length) { el.innerHTML = ''; return; }
+  const items = leaders.map((l, i) => {
+    const mine = MY_FIRST_NAME && l.first_name === MY_FIRST_NAME;
+    return '<li' + (mine ? ' class="me"' : '') + '>'
+      + '<span class="leaderboard-rank">' + (i + 1) + '</span>'
+      + '<span class="leaderboard-name">' + escHtml(l.first_name || 'Player') + '</span>'
+      + '<span class="leaderboard-score">' + Number(l.score).toLocaleString() + '</span>'
+      + '</li>';
+  }).join('');
+  el.innerHTML = '<h3>Top Scores</h3><ol>' + items + '</ol>';
 }
 
 function escHtml(str) {
@@ -417,7 +494,7 @@ function lockLandscape() {
   } catch (e) {}
 }
 
-async function selectSong(song) {
+async function selectSong(song, startMs = 0) {
   // Playing needs an input (e-drums, mic, or practice pad). Require one first.
   if (inputMode !== 'midi' && inputMode !== 'acoustic' && inputMode !== 'pad') {
     const msg = document.getElementById('input-required-msg');
@@ -429,7 +506,8 @@ async function selectSong(song) {
   enterFullscreen(); // must fire synchronously in the click handler — Safari drops the gesture after any await or timer
   lockLandscape();
   resumeContext(); // AudioContext can start suspended — only ever explicitly resumed on a keypress elsewhere, so touch/MIDI-only students could reach here with it still asleep, delaying the first scheduled clicks
-  currentSong = song;
+  currentSong    = song;
+  pendingStartMs = PLAN_MODE || DRUM_TEST_MODE ? 0 : Math.max(0, startMs || 0);
   if (TUTORIAL_MODE) {
     // Keep the whole basic set on screen for all five segments — only the
     // highlighted lane changes as the tutorial advances, so students always
@@ -466,7 +544,10 @@ async function selectSong(song) {
 }
 
 // ── Countdown ─────────────────────────────────────────────
-function startCountdown() {
+// `onDone` runs once the 4-beat count-in finishes — defaults to the hosted/
+// chart-only start; the YouTube practice-scrub path passes startGameYouTube
+// instead so a mid-song seek still gets the same metronome count-in.
+function startCountdown(onDone = startGame) {
   // Show the play area (the highway) and draw the count-in OVER it — no separate
   // black screen. A continuous rAF loop keeps the highway painted every frame, so
   // the fullscreen resize can't leave a black gap between beats.
@@ -483,7 +564,7 @@ function startCountdown() {
   const loop = (now) => {
     if (state !== STATES.COUNTDOWN) return;       // quit/aborted
     const beat = Math.floor((now - startT) / beatMs); // 0..3 through the bar
-    if (beat >= 4) { startGame(); return; }        // count-in done → notes fall
+    if (beat >= 4) { onDone(); return; }           // count-in done → notes fall
 
     drawCountdown(4 - beat);                        // count DOWN: 4, 3, 2, 1
     if (TUTORIAL_MODE) positionTutorialBanner(tutorialSegments[tutorialIndex].lane);
@@ -516,18 +597,28 @@ function resolveSongDuration() {
 function startGame() {
   showScreen('game');
   document.getElementById('hud-title').textContent = currentSong.title + (playRate < 1 ? ' — ' + Math.round(playRate * 100) + '% practice' : '');
+  // Live leaderboard is shown alongside the YouTube video only — clear any
+  // stale content left from a previous YouTube song.
+  document.getElementById('leaderboard-live').innerHTML = '';
 
   loadSong(currentSong);
   scoreState    = createScoreState(currentSong.notes.length);
   songDuration  = resolveSongDuration();
 
-  // Begin ~2 bars BEFORE the first note so blocks scroll in (not snap onto the
+  // Begin ~2 bars BEFORE the target note so blocks scroll in (not snap onto the
   // line). For songs with audio, start the track at that same point so the music
-  // comes in with the blocks — no intro playing over an empty highway.
+  // comes in with the blocks — no intro playing over an empty highway. The target
+  // is either the chart's first note (normal start) or a practice-mode scrub
+  // position chosen from the song list — whichever notes come before it are
+  // never spawned/judged (chart.js seekTo fast-forwards the cursor silently).
   const beatMs   = 60000 / (currentSong.bpm || 120);
   const leadMs   = beatMs * 4 * LEAD_IN_BARS;
   const firstNote = currentSong.notes.reduce((m, n) => Math.min(m, n.time), Infinity);
-  const startPos  = (Number.isFinite(firstNote) ? firstNote : 0) - leadMs;
+  const target    = pendingStartMs > 0
+    ? Math.min(pendingStartMs, songDuration || pendingStartMs)
+    : (Number.isFinite(firstNote) ? firstNote : 0);
+  const startPos  = target - leadMs;   // may be negative — that's the lead-in, not a bug (see below)
+  seekChart(Math.max(0, startPos));    // chart cursor itself can't go negative, unlike the clock
   // Song position begins at startPos. The clock advances at playRate (song-ms per
   // real ms), so the anchor is scaled: songPos = (now - songStartTime) * playRate.
   songStartTime = performance.now() - startPos / playRate;
@@ -558,11 +649,13 @@ async function startYouTubeSong(song) {
 
   showScreen('game');
   document.getElementById('hud-title').textContent = song.title;
+  loadLeaderboard('leaderboard-live', String(song.id ?? '')); // fires alongside video load, not blocking
   state = STATES.COUNTDOWN;            // hold the loop idle while the video loads
   cancelAnimationFrame(rafId);
   ytLoading(true);
   try {
     await YouTube.play(id);            // resolves once real content plays (past any ad)
+    YouTube.setVolume(volumePct);      // the embed has its own audio pipeline, outside our AudioContext
   } catch (e) {
     console.warn('YouTube start failed:', e);
     ytLoading(false);
@@ -572,20 +665,53 @@ async function startYouTubeSong(song) {
     return;
   }
   ytLoading(false);
-  startGameYouTube();
+
+  if (pendingStartMs > 0) {
+    // Practice-mode scrub: pause right where the video naturally started,
+    // then run the same 4-beat metronome count-in hosted mode gets before
+    // jumping into the middle of the song — landing cold on a random mid-song
+    // point with no count-in/lead-in felt jarring.
+    YouTube.pause();
+    startCountdown(startGameYouTube);
+  } else {
+    startGameYouTube();
+  }
 }
 
-// Like startGame, but the video is the clock: no lead-in metronome, no buffer.
+// Like startGame, but the video is the clock: no lead-in metronome (normal
+// start only — a scrub start gets the same count-in as hosted mode, see
+// startYouTubeSong above), no buffer.
 function startGameYouTube() {
   showScreen('game');
   document.getElementById('hud-title').textContent = currentSong.title + (playRate < 1 ? ' — ' + Math.round(playRate * 100) + '% practice' : '');
   loadSong(currentSong);
   scoreState   = createScoreState(currentSong.notes.length);
   songDuration = resolveSongDuration();
+
+  if (pendingStartMs > 0) {
+    // Same 2-bar lead-in as hosted mode, so blocks scroll in instead of
+    // appearing right at the hit line — the video plays those 2 bars for
+    // real (no silent gap to fill), which is what gives the scrub jump some
+    // musical lead time instead of landing cold on the target.
+    const beatMs  = 60000 / (currentSong.bpm || 120);
+    const leadMs  = beatMs * 4 * LEAD_IN_BARS;
+    const target  = Math.min(pendingStartMs, songDuration || pendingStartMs);
+    const startPos = Math.max(0, target - leadMs);
+    seekChart(startPos);
+    YouTube.seekTo(startPos / 1000);
+    YouTube.resume();   // was paused for the count-in above
+    // Trust the position we just requested rather than reading it back —
+    // seeks aren't instant, and getTimeMs() right after would likely still
+    // report the pre-seek position for a frame or two.
+    ytLastTimeMs = startPos;
+  } else {
+    seekChart(0);
+    ytLastTimeMs = YouTube.getTimeMs();
+  }
+
   state        = STATES.PLAYING;
   audioStarted = true;                 // the video is already playing
   YouTube.setRate(playRate);           // practice speed (video slows natively)
-  ytLastTimeMs = YouTube.getTimeMs();
   ytLastPerf   = performance.now();
   cancelAnimationFrame(rafId);
   rafId = requestAnimationFrame(gameLoop);
@@ -733,6 +859,9 @@ function endGame() {
   const grade = calcGrade(scoreState);
   const c     = scoreState.counts;
 
+  document.getElementById('leaderboard-results').innerHTML = ''; // cleared here; only the normal-play branch below repopulates it
+  const songRatingEl = document.getElementById('song-rating');
+  if (songRatingEl) songRatingEl.style.display = 'none'; // only shown for normal (non-tutorial/test/plan/practice) plays, see savePlay()
   document.getElementById('results-grade').textContent  = grade;
   document.getElementById('results-song').textContent   = currentSong.title;
   document.getElementById('r-score').textContent        = scoreState.score;
@@ -888,6 +1017,12 @@ function renderPlanResult(data) {
 
 // Record a completed (non-test) play. Fire-and-forget — never blocks the results.
 async function savePlay(acc, grade) {
+  const songRatingEl = document.getElementById('song-rating');
+  if (songRatingEl && window.RatingWidget) {
+    songRatingEl.style.display = '';
+    window.RatingWidget.reset(songRatingEl, 'song', String(currentSong.id ?? ''), 'Rate this song');
+  }
+
   const c = scoreState.counts;
   const payload = {
     song_id:      String(currentSong.id ?? ''),
@@ -909,6 +1044,7 @@ async function savePlay(acc, grade) {
       body: JSON.stringify(payload),
     });
     loadProgress();   // refresh best-per-song + recent list from the server
+    loadLeaderboard('leaderboard-results', payload.song_id); // this play may have just changed the ranking
   } catch (e) { /* offline / network — non-fatal */ }
 }
 
@@ -1283,6 +1419,13 @@ async function switchInputMode(mode) {
     await setupMidi();
     showMidiStatus();   // "MIDI connected: <kit> — hit a pad to test" / plug-in hint
     if (acousticSensGroup) acousticSensGroup.style.display = 'none';
+    // First-time e-drum players haven't mapped any pads yet — open the
+    // mapping panel automatically instead of leaving it behind a toggle,
+    // since default GM notes don't match every kit.
+    if (Object.keys(customNoteMap).length === 0) {
+      const panel = document.getElementById('pad-map');
+      if (panel) { panel.style.display = ''; buildPadMapList(); }
+    }
   } else if (mode === 'acoustic') {
     if (acousticSensGroup) acousticSensGroup.style.display = '';
     if (acousticStatus) {
@@ -1451,6 +1594,17 @@ settingsBtn?.addEventListener('click', () => {
 });
 document.getElementById('close-settings')?.addEventListener('click', () => {
   settingsScreen.classList.remove('active');
+});
+
+const volumeSlider = document.getElementById('volume-slider');
+const volumeLabel  = document.getElementById('volume-label');
+if (volumeSlider) { volumeSlider.value = volumePct; volumeLabel.textContent = volumePct + '%'; }
+volumeSlider?.addEventListener('input', () => {
+  volumePct = parseInt(volumeSlider.value, 10) || 0;
+  volumeLabel.textContent = volumePct + '%';
+  setMasterVolume(volumePct / 100);
+  if (youtubeMode) YouTube.setVolume(volumePct);
+  try { localStorage.setItem(VOLUME_KEY, String(volumePct)); } catch (e) {}
 });
 
 const speedSlider = document.getElementById('speed-slider');

@@ -9,8 +9,9 @@ if (isLoggedIn()) { header('Location: ' . SITE_URL . '/dashboard.php'); exit; }
 // Available programs and their amounts (PHP). Shared with the admin form.
 $PROGRAMS = coursePrograms();
 
-$error = '';
-$old   = $_POST; // re-fill the form on validation error
+$error   = '';
+$success = false;
+$old     = $_POST; // re-fill the form on validation error
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
@@ -89,9 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 notifySignup('New enrollment submitted',
                     "$full enrolled in \"$prog\" and submitted proof of payment. Review it in Admin → Students to confirm and unlock their sessions.");
 
-                loginById($userId);
-                header('Location: ' . SITE_URL . '/my-membership.php?submitted=1');
-                exit;
+                // No auto-login — createEnrolleeAccount() already emailed a
+                // verification link, and login is blocked until it's clicked.
+                $success = true;
             }
         }
     }
@@ -108,6 +109,16 @@ require __DIR__ . '/includes/header.php';
 <div class="auth-card auth-card--wide">
   <a class="auth-logo" href="/"><?= SITE_NAME ?></a>
   <p class="field-hint" style="text-align:center; margin-top:-1rem; margin-bottom:1.5rem;">Panay Ave. cor. Roces Ave., Quezon City</p>
+
+  <?php if ($success): ?>
+  <h1>Check your email</h1>
+  <div class="alert alert-success">
+    Your enrollment was submitted. We've sent a verification link to your email — click it to activate your account (you won't be able to log in until you do), then we'll review your proof of payment.
+  </div>
+  <p class="auth-switch">Didn't get it? <a href="/resend-verification.php">Resend the link</a>.</p>
+  <p class="auth-switch"><a href="/login.php">Back to Login</a></p>
+
+  <?php else: ?>
   <h1>Student Enrollment</h1>
 
   <?php if ($error): ?>
@@ -260,6 +271,7 @@ require __DIR__ . '/includes/header.php';
   </form>
 
   <p class="auth-switch">Already enrolled? <a href="/login.php">Log in</a></p>
+  <?php endif; ?>
 </div>
 
 <script src="/assets/js/program-amount.js"></script>

@@ -13,6 +13,26 @@ $days      = getDaysRemaining($user);
 $price     = getPrice($currency);
 $priceStr  = formatPrice($price, $currency);
 
+// Coupon: applied via a plain page-reload (?coupon=CODE), same no-JS pattern
+// as the rest of this site. Re-validated server-side again in
+// payment-process.php before actually charging — never trust this display-only
+// computation for the real charge.
+$couponCode  = trim($_GET['coupon'] ?? '');
+$coupon      = null;
+$couponError = '';
+$finalPrice  = $price;
+$finalPriceStr = $priceStr;
+if ($couponCode !== '') {
+    $result = validateCoupon($couponCode);
+    if (is_array($result)) {
+        $coupon        = $result;
+        $finalPrice    = applyCoupon($coupon, $price);
+        $finalPriceStr = formatPrice($finalPrice, $currency);
+    } else {
+        $couponError = $result;
+    }
+}
+
 $pageTitle = 'Membership — ' . SITE_NAME;
 $pageCss   = ['main', 'payment'];
 $showNav   = true;
@@ -24,9 +44,27 @@ require __DIR__ . '/includes/header.php';
 <div class="payment-card">
   <div class="payment-plan-header">
     <h1><?= $hasAccess ? 'Your Membership' : 'Activate Membership' ?></h1>
+    <?php if ($coupon): ?>
+    <div class="price-display"><span style="text-decoration:line-through;opacity:.6;font-size:.7em"><?= $priceStr ?></span> <?= $finalPriceStr ?><span>/month</span></div>
+    <p style="color:var(--success,#4ade80)">Coupon "<?= htmlspecialchars($coupon['code']) ?>" applied</p>
+    <?php else: ?>
     <div class="price-display"><?= $priceStr ?><span>/month</span></div>
+    <?php endif; ?>
     <p>Recurring monthly · Cancel anytime at least 7 days before renewal</p>
   </div>
+
+  <?php if (!$hasAccess): ?>
+  <form method="GET" action="/payment.php" class="form-row" style="align-items:flex-end;margin-bottom:1rem">
+    <div class="form-group" style="flex:1">
+      <label>Coupon Code</label>
+      <input type="text" name="coupon" value="<?= htmlspecialchars($couponCode) ?>">
+    </div>
+    <button type="submit" class="btn btn-ghost btn-sm">Apply</button>
+  </form>
+  <?php if ($couponError): ?>
+  <div class="alert alert-error"><?= htmlspecialchars($couponError) ?></div>
+  <?php endif; ?>
+  <?php endif; ?>
 
   <?php if ($hasAccess): ?>
   <div class="membership-status active">
@@ -58,6 +96,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <form method="POST" action="/payment-process.php">
       <?= csrfField() ?>
+      <input type="hidden" name="coupon" value="<?= htmlspecialchars($couponCode) ?>">
       <div class="fake-card">
         <div class="form-group">
           <label>Card Number</label>
@@ -75,12 +114,14 @@ require __DIR__ . '/includes/header.php';
         </div>
       </div>
       <button type="submit" class="btn btn-primary btn-block btn-lg">
-        Subscribe — <?= $priceStr ?>/month
+        Subscribe — <?= $finalPriceStr ?>/month
       </button>
     </form>
   </div>
   <?php else: ?>
-  <!-- STRIPE PAYMENT -->
+  <!-- STRIPE PAYMENT — coupon discount NOT wired into the actual Stripe charge
+       yet; assets/js/payment.js and its backing endpoint need to read $coupon
+       too before this path can be trusted with coupons in production. -->
   <div id="stripe-container">
     <button id="stripe-btn" class="btn btn-primary btn-block btn-lg"
             data-stripe-key="<?= htmlspecialchars(STRIPE_PUBLIC_KEY) ?>"

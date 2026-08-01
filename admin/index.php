@@ -5,7 +5,14 @@ $user = requireAdmin();
 
 // Quick stats
 $totalUsers  = db()->query('SELECT COUNT(*) FROM users WHERE role="user"')->fetchColumn();
-$activeUsers = db()->query('SELECT COUNT(*) FROM users WHERE role="user" AND access_expires_at > NOW()')->fetchColumn();
+// Online = a request in the last 5 minutes (see touchLastSeen() in auth.php).
+// Falls back to the old "unexpired subscription" count until the
+// migrate-users-last-seen.sql migration has run.
+try {
+    $onlineUsers = db()->query('SELECT COUNT(*) FROM users WHERE role="user" AND last_seen_at > NOW() - INTERVAL 5 MINUTE')->fetchColumn();
+} catch (\Throwable $e) {
+    $onlineUsers = db()->query('SELECT COUNT(*) FROM users WHERE role="user" AND access_expires_at > NOW()')->fetchColumn();
+}
 $totalSongs  = db()->query('SELECT COUNT(*) FROM songs')->fetchColumn();
 $totalPaid   = db()->query('SELECT COALESCE(SUM(amount),0) FROM payments WHERE status="success"')->fetchColumn();
 
@@ -36,10 +43,10 @@ require __DIR__ . '/../includes/header.php';
     <div class="stat-value"><?= $totalUsers ?></div>
     <div class="stat-label">Total Members</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-value"><?= $activeUsers ?></div>
-    <div class="stat-label">Active Now</div>
-  </div>
+  <a class="stat-card" href="/admin/online-users.php" style="text-decoration:none">
+    <div class="stat-value"><?= $onlineUsers ?></div>
+    <div class="stat-label">Online</div>
+  </a>
   <?php if ($hasStudents): ?>
   <a class="stat-card" href="/admin/students.php" style="text-decoration:none">
     <div class="stat-value"><?= $totalStudents ?></div>

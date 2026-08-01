@@ -42,10 +42,10 @@ const WEB_ACCESS_PROGRAM = 'Website access';
 
 // True if the student has one-on-one session access — either current credits or
 // a program that grants them. Web-access-only students return false. A null
-// student (admin / legacy account with no enrollment row) keeps the default
-// behaviour (true) so session links aren't hidden from non-students.
+// student (self-registered "Groove Quest" signups who never enrolled in a
+// one-on-one program) also returns false — they have nothing to book.
 function studentHasSessions(?array $student): bool {
-    if (!$student) return true;
+    if (!$student) return false;
     if ((int) ($student['session_credits'] ?? 0) > 0) return true;
     // A session-granting program only unlocks the Sessions area once payment is
     // confirmed — free-trial / unpaid enrollees don't get session access yet.

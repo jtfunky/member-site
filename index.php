@@ -10,7 +10,9 @@ if (isLoggedIn()) {
 $currency = getUserCurrency();
 $price    = formatPrice(getPrice($currency), $currency);
 
-$pageTitle = SITE_NAME . ' — Play Drums Online';
+$pageTitle       = SITE_NAME . ' — Play Drums Online';
+$pageDescription = 'Play a browser-based drum rhythm game with your e-drum kit or acoustic drums — no download needed. Learn drums online or in person with ' . SITE_NAME . '.';
+$pageIndex       = true;
 $pageCss   = ['main', 'landing'];
 $bodyClass = 'landing';
 require __DIR__ . '/includes/header.php';
@@ -35,7 +37,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <nav class="top-nav">
-  <div class="nav-brand"><i class="ti ti-music drum-icon" aria-hidden="true"></i> <span class="brand-name"><?= SITE_NAME ?></span><span class="brand-abbr">ZADA</span></div>
+  <div class="nav-brand"><span class="brand-name"><?= SITE_NAME ?></span><span class="brand-abbr">GrooveQuest</span></div>
   <div class="nav-links">
     <a href="/login.php">Log In</a>
     <a href="/register.php" class="btn btn-primary btn-sm">Sign Up Free</a>
@@ -63,8 +65,8 @@ require __DIR__ . '/includes/header.php';
   </div>
   <div class="hero-inner">
     <div class="hero-text reveal">
-      <h1>Play Drums.<br>Easy and Fun.</h1>
-      <p class="hero-sub">A browser-based rhythm game that works with your electronic drum kit or acoustic drums. No download needed.</p>
+      <h1>Play Drums.<br>Fun and Easy.</h1>
+      <p class="hero-sub">A browser-based learning platform that works with your electronic drum kit or acoustic drums. No download needed.</p>
       <a href="/register.php" class="btn btn-primary btn-lg">Start Free Trial — Signup Now!</a>
     </div>
   </div>

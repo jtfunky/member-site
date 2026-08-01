@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/practice_plan.php';
+require_once __DIR__ . '/includes/ratings.php';
 
 $user = requireLogin();
 requireProfileComplete($user);
@@ -110,8 +111,11 @@ require __DIR__ . '/includes/header.php';
       <div id="plan-error" class="alert alert-error" style="display:none;text-align:left;"></div>
     </div>
   <?php endif; ?>
+
+  <div style="margin-top:1.5rem"><?= ratingWidget((int) $user['id'], 'my-plan', '', 'Rate this page') ?></div>
 </div>
 </main>
 
 <script src="/assets/js/my-plan.js?v=20260710"></script>
+<script src="/assets/js/rating-widget.js?v=<?= @filemtime(__DIR__ . '/assets/js/rating-widget.js') ?: 1 ?>"></script>
 <?php require __DIR__ . '/includes/footer.php'; ?>
